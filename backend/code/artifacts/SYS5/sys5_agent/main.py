@@ -124,8 +124,10 @@ def main(argv=None) -> int:
     task_message_lines = [
         f"Client: {args.client}",
         f"Domain: {domain} ({settings.DOMAIN_LABELS.get(domain, domain)})",
-        f"Input directory: {input_dir}",
         f"Requirements file name: {args.requirements_file}",
+        "Input files: call list_input_files() (no arguments) via the "
+        "discovery-agent to enumerate them -- this run's input directory is "
+        "already fixed, there is no path to look up or pass in.",
         f"Output path for the final workbook: {output_path}",
     ]
 

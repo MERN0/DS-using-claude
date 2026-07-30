@@ -145,8 +145,10 @@ def sys5(
         f"Requested by: {username}",
         f"Requirements version: {current_version}",
         f"Domain: {normalized_domain} ({settings.DOMAIN_LABELS.get(normalized_domain, normalized_domain)})",
-        f"Input directory: {input_dir}",
         f"Requirements file name: {requirement_filename}",
+        "Input files: call list_input_files() (no arguments) via the "
+        "discovery-agent to enumerate them -- this run's input directory is "
+        "already fixed, there is no path to look up or pass in.",
         f"Output path for the final workbook: {output_path}",
     ]
 

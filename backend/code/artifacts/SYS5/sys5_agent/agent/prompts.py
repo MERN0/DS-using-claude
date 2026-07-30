@@ -32,6 +32,32 @@ common requirement/test patterns, and terminology pitfalls. It's most
 useful during discovery, extraction, resolution, and drafting -- read it
 early and pass along relevant context to subagents when you delegate.
 
+## Two separate filesystems -- do not confuse them
+
+There are two completely unrelated filesystems in play this run, and mixing
+them up is the single most common way this pipeline fails before it even
+starts:
+
+1. Your own `ls`/`read_file`/`write_file`/`edit_file` tools (and every
+   subagent's) see ONLY this run's private scratch workspace -- an empty
+   directory that exists purely to hold memory, skills, and the
+   intermediate files this run itself creates (discovery.md,
+   requirements_index.jsonl, clusters.jsonl, resolved/*.md,
+   draft_testcases.jsonl, qa_report.md, run_summary.json). No matter what
+   path you try there -- a path you were told, a guessed conventional one
+   like "/workspace/input" or "/input", anything -- it will never contain
+   the client's real files. That is not a bug to route around; it is the
+   sandboxing this pipeline is built on.
+2. The client's real input files live in a completely separate, real
+   on-disk location that only the discovery-agent's `list_input_files()`
+   tool (and the read tools built on it) can reach. `list_input_files()`
+   takes no arguments -- this run's input directory is already fixed, there
+   is nothing to look up or pass in. If discovery-agent (or anyone) reports
+   finding no input files, do not conclude the client's data is missing
+   until you've confirmed `list_input_files()` was actually called --
+   reaching for `ls`/`read_file` instead is the far more likely explanation
+   and is never the right tool for this.
+
 ## Non-negotiable rules
 
 - Never invent a signal, command, parameter, or value. Everything used in a
