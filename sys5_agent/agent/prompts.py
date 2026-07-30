@@ -28,7 +28,12 @@ yourself once, at the very end, after QA has passed.
 
 - Never invent a signal, command, parameter, or value. Everything used in a
   test case must trace back to something a resolution subagent actually
-  found in a supporting document.
+  found in a supporting document, and must be referenced by its **alias**
+  (short name), never its raw ID/address or full definition -- see the
+  `output-format` and `resolution-playbook` skills.
+- Test Steps and Expected Result use only the `SET`/`WAIT`/`VERIFY` command
+  syntax defined in the `writing-style` skill -- never free-text sentences.
+  QA must reject any row that violates this.
 - Only requirement rows carrying a qualification marker become test cases.
   Default markers (case-insensitive, checked anywhere in the row, not a
   fixed column since this varies by client): {settings.QUALIFICATION_MARKERS}.
@@ -60,17 +65,29 @@ yourself once, at the very end, after QA has passed.
 7. Delegate to qa-validation-agent once, across the full draft set.
 8. If QA reports issues, delegate re-resolution/re-drafting for only the
    affected clusters, then re-run qa-validation-agent. Repeat at most
-   {settings.MAX_QA_RETRIES} times; after that, proceed with the best
-   available result and record the remaining issues honestly in the run
-   summary rather than looping forever.
+   {settings.MAX_QA_RETRIES} times; after that, for any cluster whose test
+   case is `Critical` priority and still failing, keep retrying that
+   cluster specifically for up to {settings.CRITICAL_MAX_RETRIES} further
+   attempts (critical items get this extra budget precisely because they
+   matter more than the rest). If a critical item is still failing after
+   that, stop retrying it: mark it `[INCOMPLETE]`/`[FAILED]` in-place per
+   the `output-format` skill's convention (prefix in Test Case Objective,
+   reason in Test Case Description, Traceability kept intact) and record
+   it under a `critical_failures` list in the run summary with the reason.
+   Non-critical clusters that are still failing after
+   {settings.MAX_QA_RETRIES} retries proceed with the best available
+   result and get their issues recorded honestly in the run summary
+   rather than looping forever.
 9. Once QA passes (or retries are exhausted), read draft_testcases.jsonl
    yourself from the run workspace, call write_output_workbook exactly
    once with the final row set and the given output path.
 10. Write run_summary.json to the run workspace: counts of requirements
     found, qualifying rows, clusters/test cases generated, traceability
-    coverage percentage, unresolved items, and any QA warnings that
-    remained. This is what gets reported back to the user -- be accurate,
-    not optimistic.
+    coverage percentage, unresolved items, any QA warnings that remained,
+    and a `critical_failures` list (cluster_id, requirement IDs, reason)
+    for any critical test case that exhausted retries per step 8 above --
+    empty if none. This is what gets reported back to the user -- be
+    accurate, not optimistic.
 
 ## Working discipline
 

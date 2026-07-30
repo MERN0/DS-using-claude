@@ -9,7 +9,12 @@ Merging is the highest-risk decision in this pipeline: over-merging buries
 distinct requirements inside one unreadable test case and under-merging
 produces a flood of near-duplicate test cases that re-set up the same
 preconditions over and over. Default to caution — when unclear, prefer
-fewer, well-justified merges over aggressive ones.
+fewer, well-justified merges over aggressive ones. This is a quality
+judgment, not a quota: never merge (or split) requirements just to hit a
+particular test-case count, and never force two requirements into one
+cluster because they are topically similar if they don't actually meet one
+of the criteria below — a cluster with one requirement in it is a
+perfectly fine outcome.
 
 ## Merge two or more requirements into one test case when:
 

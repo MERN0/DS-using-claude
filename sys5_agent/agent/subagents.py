@@ -154,9 +154,12 @@ RESOLUTION_AGENT = {
         "it as unresolved with the terms you tried, and move on rather "
         "than guessing.\n\n"
         "Write resolved/<cluster_id>.md to the run workspace: for this "
-        "cluster, the resolved signals/commands/parameters (with exact "
-        "name, source file, sheet, row, and value/range), and a list of "
-        "anything left unresolved.\n\n" + _RETURN_SUMMARY_ONLY
+        "cluster, the resolved signals/commands/parameters -- record the "
+        "**alias** (short name/label) separately from its raw ID/address "
+        "if the sheet has both, plus source file, sheet, row, and "
+        "value/range -- and a list of anything left unresolved. Drafting "
+        "will use the alias you record here, never the ID, so get the "
+        "alias right.\n\n" + _RETURN_SUMMARY_ONLY
     ),
     "tools": [search_sheet, read_sheet_range, preview_sheet, list_workbook_sheets],
     "skills": ["resolution-playbook"],
@@ -181,10 +184,19 @@ TEST_CASE_DRAFTING_AGENT = {
         "Produce exactly one JSON object with the 12 output-format fields "
         "(Test Case ID, Feature/Module, Variant, Traceability, Test Case "
         "Objective, Test Case Description, Test Precondition, Test Input "
-        "Data, Test Steps, Expected Result, Mode of Execution, Priority). "
+        "Data, Test Steps, Expected Result, Mode of Execution, Priority).\n\n"
+        "Hard rule: Test Steps and Expected Result use ONLY numbered "
+        "SET/WAIT/VERIFY commands (see writing-style) -- never a sentence. "
+        "Hard rule: every signal/command you write into Test Input Data, "
+        "Test Steps, or Expected Result is the alias resolution recorded "
+        "for it -- never the raw ID/address, and never anything resolution "
+        "didn't actually confirm.\n\n"
         "If part of the cluster was left unresolved, still draft what you "
         "can and clearly flag the unresolved portion inside the relevant "
-        "field rather than omitting it silently.\n\n"
+        "field rather than omitting it silently. If this cluster's test "
+        "case is Critical priority and cannot be resolved/drafted cleanly, "
+        "say so plainly in your summary so the orchestrator can apply the "
+        "critical-retry policy rather than silently shipping it.\n\n"
         "Append the JSON object to draft_testcases.jsonl in the run "
         "workspace.\n\n" + _RETURN_SUMMARY_ONLY
     ),
@@ -208,17 +220,24 @@ QA_VALIDATION_AGENT = {
         "Check, across the full draft set: (1) every requirement ID from "
         "requirements_index.jsonl appears in some test case's "
         "Traceability field -- coverage; (2) every signal/command/"
-        "parameter name appearing in a test case's Test Input Data, Test "
-        "Steps, or Expected Result actually appears in that cluster's "
-        "resolved/<cluster_id>.md -- anti-hallucination; (3) all 12 "
-        "columns are non-empty for every row; (4) Test Case IDs are "
-        "unique across the whole set.\n\n"
+        "parameter alias appearing in a test case's Test Input Data, Test "
+        "Steps, or Expected Result actually appears (by alias, not just "
+        "by ID) in that cluster's resolved/<cluster_id>.md -- "
+        "anti-hallucination; (3) all 12 columns are non-empty for every "
+        "row; (4) Test Case IDs are unique across the whole set; (5) Test "
+        "Steps and Expected Result use ONLY numbered SET/WAIT/VERIFY "
+        "commands -- flag any row containing a free-text sentence instead; "
+        "(6) Test Input Data/Test Steps/Expected Result reference the "
+        "resolved alias, never a raw signal ID/address/full definition.\n\n"
         "Write qa_report.md to the run workspace listing every issue "
         "found, grouped by cluster_id, with enough detail that a re-draft "
         "or re-resolve call could fix it. In your summary to the caller, "
         "state clearly whether the draft set PASSED or has N issues "
-        "needing rework, and list the affected cluster_ids so the "
-        "orchestrator knows exactly what to re-run.\n\n" + _RETURN_SUMMARY_ONLY
+        "needing rework, list the affected cluster_ids so the orchestrator "
+        "knows exactly what to re-run, and separately flag any failing "
+        "cluster whose test case is Critical priority -- the orchestrator "
+        "applies a longer retry budget to those before giving up on "
+        "them.\n\n" + _RETURN_SUMMARY_ONLY
     ),
     "tools": [],
     "skills": ["output-format"],

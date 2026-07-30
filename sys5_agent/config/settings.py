@@ -57,6 +57,14 @@ MAX_RESOLUTION_ATTEMPTS = int(os.environ.get("SYS5_MAX_RESOLUTION_ATTEMPTS", "5"
 # clusters) before the run proceeds with recorded warnings.
 MAX_QA_RETRIES = int(os.environ.get("SYS5_MAX_QA_RETRIES", "2"))
 
+# Bounded retries specifically for a *critical*-priority test case that is
+# still failing QA after the general retry budget above. Critical items get
+# this extra, separately-tracked budget because silently shipping a broken
+# critical test case is worse than spending more retries on it; once this is
+# also exhausted the item is marked incomplete/failed rather than retried
+# forever (see ORCHESTRATOR_SYSTEM_PROMPT).
+CRITICAL_MAX_RETRIES = int(os.environ.get("SYS5_CRITICAL_MAX_RETRIES", "3"))
+
 # Rows previewed when classifying an unknown sheet during discovery.
 SHEET_PREVIEW_ROWS = int(os.environ.get("SYS5_SHEET_PREVIEW_ROWS", "5"))
 
