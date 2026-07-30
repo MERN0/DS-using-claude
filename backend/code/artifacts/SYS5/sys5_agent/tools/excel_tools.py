@@ -24,6 +24,16 @@ predetermined output file, regardless of what path a (possibly confused or
 prompt-injected) model turn tries to pass in. Build a fresh set of tool
 instances per run -- never share one factory's output across two different
 callers' directories.
+
+Every read-only tool below takes a bare `file_name` (never a path) -- the
+input directory itself is fixed per run via the closure, so the model is
+never asked to know, construct, or re-type it. This is deliberate, not just
+a convenience: an absolute path is exactly the kind of value a model can get
+wrong across turns/agents (dropping the directory, mis-joining it, or
+mangling a Windows-style path when the run happens to execute on a
+different OS than whatever machine the path string originally came from),
+and `list_input_files` already hands back the one `file_name` value that
+every other tool here needs, verbatim.
 """
 
 from __future__ import annotations
@@ -124,19 +134,11 @@ def _cell_str(value: Any) -> Any:
 # ---------------------------------------------------------------------------
 
 
-def _resolve_within(root: Path, path: str) -> Optional[Path]:
-    """Resolve `path` against `root`, refusing to leave `root`.
+_PATH_SEP_RE = re.compile(r"[\\/]")
 
-    Accepts both an absolute path that already lives under `root` (the
-    common case: an agent combines the input directory it was told about
-    with a file name) and a bare relative name/sub-path. Symlinks are
-    resolved too, so a symlink inside `root` pointing outside it is also
-    rejected. Returns `None` (never raises) when the resolved path would
-    escape `root`, so callers can turn that into a normal tool-error JSON
-    instead of crashing the agent turn.
-    """
-    root = root.resolve()
-    candidate = Path(path)
+
+def _candidate_for(root: Path, raw: str) -> Optional[Path]:
+    candidate = Path(raw)
     candidate = candidate if candidate.is_absolute() else (root / candidate)
     candidate = candidate.resolve()
     if candidate != root and root not in candidate.parents:
@@ -144,13 +146,47 @@ def _resolve_within(root: Path, path: str) -> Optional[Path]:
     return candidate
 
 
-def _access_denied(path: str, root: Path) -> str:
+def _resolve_within(root: Path, file_name: str) -> Optional[Path]:
+    """Resolve `file_name` against `root`, refusing to leave `root`.
+
+    The tools below only ever hand the calling agent a bare file name (see
+    `list_input_files`) -- `root` is already fixed per run via closure, so
+    the model never needs to know or reconstruct an absolute path, and
+    never gets a chance to garble one (e.g. a Windows-style
+    "C:\\Users\\...\\x.xlsx" typed on a POSIX host resolves to nothing --
+    backslashes aren't separators there -- which used to surface as a
+    confusing "no such file or directory C:\\Users\\..." error). If a
+    model still hands back something path-like anyway (its own guess, or a
+    stray value copied from elsewhere), this falls back to just the last
+    path segment (split on both '/' and '\\') before giving up, so that
+    degrades gracefully instead of failing outright.
+
+    Symlinks are resolved too, so a symlink inside `root` pointing outside
+    it is also rejected. Returns `None` (never raises) when nothing
+    resolves inside `root`, so callers can turn that into a normal
+    tool-error JSON instead of crashing the agent turn.
+    """
+    root = root.resolve()
+    candidate = _candidate_for(root, file_name)
+    if candidate is not None and candidate.exists():
+        return candidate
+
+    tail = _PATH_SEP_RE.split(str(file_name).strip())[-1]
+    if tail and tail != str(file_name):
+        fallback = _candidate_for(root, tail)
+        if fallback is not None and fallback.exists():
+            return fallback
+
+    return candidate
+
+
+def _access_denied(file_name: str, root: Path) -> str:
     return _dump(
         {
             "error": (
-                f"Access denied: '{path}' resolves outside the allowed "
-                f"directory for this run ({root}). Only files inside the "
-                "input directory you were given may be read."
+                f"Access denied: '{file_name}' resolves outside the allowed "
+                f"directory for this run ({root}). Pass just the bare file "
+                "name (as returned by list_input_files), not a path."
             )
         }
     )
@@ -173,8 +209,8 @@ def build_read_only_tools(input_root: Path) -> list:
     root = Path(input_root).resolve()
 
     @tool
-    def list_input_files(input_dir: str) -> str:
-        """List every .xlsx file found directly inside input_dir.
+    def list_input_files() -> str:
+        """List every .xlsx file found directly inside this run's input directory.
 
         Use this first, before anything else, to see what's actually in the
         client's data directory -- the requirements file plus an unknown mix
@@ -182,26 +218,18 @@ def build_read_only_tools(input_root: Path) -> list:
         lists, application parameters, communication matrices, or other
         reference data). File names are NOT standardized across clients; do
         not assume any particular name means a particular thing without
-        previewing it.
-
-        Args:
-            input_dir: The client's data directory for this run (as given
-                to you). Must resolve inside this run's allowed input
-                directory.
+        previewing it. There is no directory to pass in -- this run's input
+        directory is fixed, and every `file_name` this returns is exactly
+        what every other tool here expects (no directory prefix needed).
 
         Returns:
             JSON list of {"file_name": str, "size_bytes": int}.
         """
-        d = _resolve_within(root, input_dir)
-        if d is None:
-            return _access_denied(input_dir, root)
-        if not d.is_dir():
-            return _dump({"error": f"Not a directory: {d}"})
-        files = sorted(p for p in d.iterdir() if p.is_file() and p.suffix.lower() in (".xlsx", ".xlsm"))
+        files = sorted(p for p in root.iterdir() if p.is_file() and p.suffix.lower() in (".xlsx", ".xlsm"))
         return _dump([{"file_name": p.name, "size_bytes": p.stat().st_size} for p in files])
 
     @tool
-    def list_workbook_sheets(file_path: str) -> str:
+    def list_workbook_sheets(file_name: str) -> str:
         """List every sheet in a workbook along with its used dimensions.
 
         Call this on a file before previewing/reading it, so you know what
@@ -211,16 +239,15 @@ def build_read_only_tools(input_root: Path) -> list:
         requirements sheet).
 
         Args:
-            file_path: Path to the .xlsx file (combine input_dir + file
-                name). Must resolve inside this run's allowed input
-                directory.
+            file_name: Exact file name, as returned by list_input_files (no
+                directory -- this run's input directory is fixed).
 
         Returns:
             JSON list of {"sheet_name": str, "max_row": int, "max_col": int}.
         """
-        p = _resolve_within(root, file_path)
+        p = _resolve_within(root, file_name)
         if p is None:
-            return _access_denied(file_path, root)
+            return _access_denied(file_name, root)
         if not p.is_file():
             return _dump({"error": f"Not a file: {p}"})
         wb = load_workbook(p, read_only=True, data_only=True)
@@ -234,7 +261,7 @@ def build_read_only_tools(input_root: Path) -> list:
             wb.close()
 
     @tool
-    def preview_sheet(file_path: str, sheet_name: str, n_rows: Optional[int] = None) -> str:
+    def preview_sheet(file_name: str, sheet_name: str, n_rows: Optional[int] = None) -> str:
         """Preview the first N raw rows of a sheet, keyed by column letter.
 
         Use this to classify an unknown sheet (is it the requirements sheet?
@@ -247,8 +274,8 @@ def build_read_only_tools(input_root: Path) -> list:
         exactly what you're trying to determine here.
 
         Args:
-            file_path: Path to the .xlsx file. Must resolve inside this
-                run's allowed input directory.
+            file_name: Exact file name, as returned by list_input_files (no
+                directory -- this run's input directory is fixed).
             sheet_name: Exact sheet name (from list_workbook_sheets).
             n_rows: How many rows to preview from the top. Defaults to the
                 configured SHEET_PREVIEW_ROWS.
@@ -256,9 +283,9 @@ def build_read_only_tools(input_root: Path) -> list:
         Returns:
             JSON {"sheet_name": str, "rows": [{"row": int, "cells": {"A": ..., "B": ...}}]}.
         """
-        p = _resolve_within(root, file_path)
+        p = _resolve_within(root, file_name)
         if p is None:
-            return _access_denied(file_path, root)
+            return _access_denied(file_name, root)
         n = n_rows or settings.SHEET_PREVIEW_ROWS
         wb = load_workbook(p, read_only=True, data_only=True)
         try:
@@ -266,19 +293,19 @@ def build_read_only_tools(input_root: Path) -> list:
                 return _dump({"error": f"Sheet '{sheet_name}' not found. Available: {wb.sheetnames}"})
             ws = wb[sheet_name]
             rows_out = []
-            for row in ws.iter_rows(min_row=1, max_row=min(n, ws.max_row or 0)):
+            for row_idx, row in enumerate(ws.iter_rows(min_row=1, max_row=min(n, ws.max_row or 0)), start=1):
                 cells = {}
-                for cell in row:
+                for col_idx, cell in enumerate(row, start=1):
                     if cell.value is not None:
-                        cells[get_column_letter(cell.column)] = _cell_str(cell.value)
-                rows_out.append({"row": row[0].row if row else None, "cells": cells})
+                        cells[get_column_letter(col_idx)] = _cell_str(cell.value)
+                rows_out.append({"row": row_idx, "cells": cells})
             return _dump({"sheet_name": sheet_name, "rows": rows_out})
         finally:
             wb.close()
 
     @tool
     def read_sheet_range(
-        file_path: str,
+        file_name: str,
         sheet_name: str,
         start_row: int,
         end_row: int,
@@ -293,8 +320,8 @@ def build_read_only_tools(input_root: Path) -> list:
         matter before narrowing with `columns`.
 
         Args:
-            file_path: Path to the .xlsx file. Must resolve inside this
-                run's allowed input directory.
+            file_name: Exact file name, as returned by list_input_files (no
+                directory -- this run's input directory is fixed).
             sheet_name: Exact sheet name.
             start_row: 1-based first row to read (inclusive).
             end_row: 1-based last row to read (inclusive). Will be clamped to
@@ -309,9 +336,9 @@ def build_read_only_tools(input_root: Path) -> list:
             JSON {"sheet_name": str, "start_row": int, "end_row": int,
             "truncated": bool, "rows": [{"row": int, "cells": {...}}]}.
         """
-        p = _resolve_within(root, file_path)
+        p = _resolve_within(root, file_name)
         if p is None:
-            return _access_denied(file_path, root)
+            return _access_denied(file_name, root)
         wb = load_workbook(p, read_only=True, data_only=True)
         try:
             if sheet_name not in wb.sheetnames:
@@ -325,15 +352,22 @@ def build_read_only_tools(input_root: Path) -> list:
 
             rows_out = []
             if start_row <= capped_end:
-                for row in ws.iter_rows(min_row=start_row, max_row=capped_end):
+                # Indexed by `enumerate`/known column position rather than a
+                # cell's own .row/.column: in openpyxl's read-only mode, a
+                # blank cell comes back as an `EmptyCell` placeholder with
+                # neither attribute, so deriving position from the cell
+                # itself (as the previous version did) crashed on any row
+                # with an empty cell and silently reported "row": null
+                # whenever column A itself was blank.
+                for row_idx, row in enumerate(ws.iter_rows(min_row=start_row, max_row=capped_end), start=start_row):
                     cells = {}
-                    for cell in row:
-                        letter = get_column_letter(cell.column)
+                    for col_idx, cell in enumerate(row, start=1):
+                        letter = get_column_letter(col_idx)
                         if col_filter is not None and letter not in col_filter:
                             continue
                         if cell.value is not None:
                             cells[letter] = _cell_str(cell.value)
-                    rows_out.append({"row": row[0].row if row else None, "cells": cells})
+                    rows_out.append({"row": row_idx, "cells": cells})
 
             return _dump(
                 {
@@ -349,7 +383,7 @@ def build_read_only_tools(input_root: Path) -> list:
 
     @tool
     def search_sheet(
-        file_path: str,
+        file_name: str,
         sheet_name: str,
         query: str,
         columns: Optional[list[str]] = None,
@@ -366,8 +400,8 @@ def build_read_only_tools(input_root: Path) -> list:
         expression instead.
 
         Args:
-            file_path: Path to the .xlsx file. Must resolve inside this
-                run's allowed input directory.
+            file_name: Exact file name, as returned by list_input_files (no
+                directory -- this run's input directory is fixed).
             sheet_name: Exact sheet name.
             query: Substring or (if regex=True) regular expression to search
                 for.
@@ -382,9 +416,9 @@ def build_read_only_tools(input_root: Path) -> list:
             JSON {"sheet_name": str, "match_count": int, "truncated": bool,
             "rows": [{"row": int, "cells": {...}}]}.
         """
-        p = _resolve_within(root, file_path)
+        p = _resolve_within(root, file_name)
         if p is None:
-            return _access_denied(file_path, root)
+            return _access_denied(file_name, root)
         limit = max_results or settings.MAX_SEARCH_RESULTS
         wb = load_workbook(p, read_only=True, data_only=True)
         try:
@@ -405,11 +439,15 @@ def build_read_only_tools(input_root: Path) -> list:
 
             matches = []
             truncated = False
-            for row in ws.iter_rows():
+            # See read_sheet_range above: position comes from `enumerate`,
+            # never from a cell's own .row/.column, since a blank cell in
+            # openpyxl's read-only mode is an `EmptyCell` placeholder
+            # lacking both.
+            for row_idx, row in enumerate(ws.iter_rows(), start=1):
                 cells = {}
                 hit = False
-                for cell in row:
-                    letter = get_column_letter(cell.column)
+                for col_idx, cell in enumerate(row, start=1):
+                    letter = get_column_letter(col_idx)
                     if col_filter is not None and letter not in col_filter:
                         continue
                     if cell.value is not None:
@@ -420,7 +458,7 @@ def build_read_only_tools(input_root: Path) -> list:
                     if len(matches) >= limit:
                         truncated = True
                         break
-                    matches.append({"row": row[0].row if row else None, "cells": cells})
+                    matches.append({"row": row_idx, "cells": cells})
 
             return _dump(
                 {
