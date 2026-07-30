@@ -24,6 +24,36 @@ RUNS_DIR = REPO_ROOT / "runs"
 OUTPUT_DIR = REPO_ROOT / "output"
 
 # ---------------------------------------------------------------------------
+# Automotive domains
+# ---------------------------------------------------------------------------
+
+# A domain is passed once at the start of a run (--domain) and stays constant
+# for the whole cycle. Each domain has a domains/<name>/skills/domain-knowledge/
+# SKILL.md carrying the detailed items (ECUs/modules, signal/command naming
+# conventions, buses, typical requirement/test patterns, terminology
+# pitfalls) for that domain -- loaded on demand like any other skill, not
+# preloaded into every turn's context.
+DOMAINS_DIR = REPO_ROOT / "domains"
+
+DOMAINS = ["bcm", "ivi", "ev", "powertrain", "adas", "chassis", "telematics"]
+
+DOMAIN_LABELS = {
+    "bcm": "Body Control Module",
+    "ivi": "In-Vehicle Infotainment",
+    "ev": "Electric Vehicle powertrain, battery & charging",
+    "powertrain": "Powertrain (engine, transmission & driveline)",
+    "adas": "Advanced Driver Assistance Systems",
+    "chassis": "Chassis & vehicle dynamics (braking, steering, suspension)",
+    "telematics": "Telematics & connectivity",
+}
+
+# Accepted alternate spellings/typos for --domain, normalized before lookup
+# (e.g. the common misspelling of "chassis").
+DOMAIN_ALIASES = {
+    "chasis": "chassis",
+}
+
+# ---------------------------------------------------------------------------
 # LLM endpoint (self-hosted Qwen, OpenAI-compatible)
 # ---------------------------------------------------------------------------
 
@@ -128,3 +158,17 @@ def client_dir(client: str) -> Path:
 
 def default_client_dir() -> Path:
     return CLIENTS_DIR / DEFAULT_CLIENT_DIR_NAME
+
+
+def normalize_domain(domain: str) -> str:
+    """Lowercase/trim a --domain value and resolve known aliases/typos
+    (e.g. "chasis" -> "chassis") to the canonical domain key."""
+    key = domain.strip().lower()
+    return DOMAIN_ALIASES.get(key, key)
+
+
+def domain_dir(domain: str) -> Path:
+    """Resolve a domain name to its domains/<name> directory, falling back
+    to the domain's own dir even if it doesn't exist yet (caller decides how
+    to handle an unknown domain)."""
+    return DOMAINS_DIR / normalize_domain(domain)

@@ -2,9 +2,14 @@
 Single entry point for SYS2 -> SYS5 test case generation.
 
 Usage:
-    python main.py --client acme --input-dir /path/to/client/data \\
+    python main.py --client acme --domain bcm --input-dir /path/to/client/data \\
         --requirements-file SYS2_Requirements.xlsx \\
         [--output-path output/acme_SYS5.xlsx]
+
+--domain is passed once at the start of a run and stays constant for the
+whole cycle; it loads that automotive domain's detailed knowledge (typical
+ECUs/modules, signal/command naming conventions, buses, requirement/test
+patterns) as an on-demand skill alongside the standard rules.
 
 All tunables (model endpoint, chunk sizes, output columns, qualification
 markers, retry limits) live in config/settings.py -- this file only wires
@@ -43,6 +48,16 @@ def parse_args(argv=None) -> argparse.Namespace:
         f"Defaults to '{settings.DEFAULT_CLIENT_DIR_NAME}' (generic rules only).",
     )
     parser.add_argument(
+        "--domain",
+        required=True,
+        choices=sorted(settings.DOMAINS) + sorted(settings.DOMAIN_ALIASES),
+        help=(
+            "Automotive domain for this run, constant for the whole cycle "
+            f"(loads that domain's knowledge as a skill). One of: "
+            f"{', '.join(settings.DOMAINS)}."
+        ),
+    )
+    parser.add_argument(
         "--input-dir",
         required=True,
         help="Directory containing the requirements file and all supporting workbooks.",
@@ -77,13 +92,22 @@ def main(argv=None) -> int:
             file=sys.stderr,
         )
 
-    agent, run_dir = build_agent(args.client)
+    domain = settings.normalize_domain(args.domain)
+    if not (settings.domain_dir(domain) / "skills" / "domain-knowledge").is_dir():
+        print(
+            f"WARNING: domains/{domain} has no domain-knowledge skill yet -- "
+            "proceeding without domain-specific knowledge.",
+            file=sys.stderr,
+        )
+
+    agent, run_dir = build_agent(args.client, domain)
 
     output_path = Path(args.output_path) if args.output_path else settings.OUTPUT_DIR / f"{args.client}_SYS5_{run_dir.name}.xlsx"
     output_path = output_path.resolve()
 
     task_message = (
         f"Client: {args.client}\n"
+        f"Domain: {domain} ({settings.DOMAIN_LABELS.get(domain, domain)})\n"
         f"Input directory: {input_dir}\n"
         f"Requirements file name: {args.requirements_file}\n"
         f"Output path for the final workbook: {output_path}\n\n"

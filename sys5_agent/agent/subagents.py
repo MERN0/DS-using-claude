@@ -60,9 +60,15 @@ DISCOVERY_AGENT = {
         "starts (headers may not be row 1), and the column letters that "
         "matter (e.g. which column holds signal names, which holds "
         "values). This file is what every later phase relies on to know "
-        "where to look, so be concrete and specific.\n\n" + _RETURN_SUMMARY_ONLY
+        "where to look, so be concrete and specific.\n\n"
+        "If a sheet's purpose or naming isn't obvious, check the "
+        "domain-knowledge skill for this run's automotive domain -- it "
+        "lists the ECUs/modules and signal/command categories typical of "
+        "that domain, which often explains an otherwise-cryptic sheet or "
+        "column name.\n\n" + _RETURN_SUMMARY_ONLY
     ),
     "tools": [list_input_files, list_workbook_sheets, preview_sheet],
+    "skills": ["domain-knowledge"],
 }
 
 REQUIREMENT_EXTRACTION_AGENT = {
@@ -96,10 +102,15 @@ REQUIREMENT_EXTRACTION_AGENT = {
         "Append one JSON object per qualifying requirement to "
         "requirements_index.jsonl in the run workspace (create it if it "
         "doesn't exist yet; append, don't overwrite previous chunks' "
-        "results).\n\n" + _RETURN_SUMMARY_ONLY + " Include the count of "
+        "results).\n\n"
+        "If requirement text uses domain-specific abbreviations or "
+        "feature/module names you're unsure about, check the "
+        "domain-knowledge skill for this run's automotive domain before "
+        "guessing.\n\n" + _RETURN_SUMMARY_ONLY + " Include the count of "
         "qualifying rows found in this chunk in your summary."
     ),
     "tools": [read_sheet_range, preview_sheet],
+    "skills": ["domain-knowledge"],
 }
 
 MERGE_PLANNING_AGENT = {
@@ -123,10 +134,14 @@ MERGE_PLANNING_AGENT = {
         "cluster, each with a stable cluster_id and the full list of "
         "requirement IDs it contains. On a refinement call, overwrite "
         "clusters.jsonl with the revised clustering and briefly note in "
-        "your summary what changed and why.\n\n" + _RETURN_SUMMARY_ONLY
+        "your summary what changed and why.\n\n"
+        "The domain-knowledge skill lists this run's automotive domain's "
+        "typical feature/module groupings -- useful when deciding whether "
+        "two requirements genuinely share a feature/module per the "
+        "merging-strategy skill's criteria.\n\n" + _RETURN_SUMMARY_ONLY
     ),
     "tools": [],
-    "skills": ["merging-strategy"],
+    "skills": ["merging-strategy", "domain-knowledge"],
 }
 
 RESOLUTION_AGENT = {
@@ -159,10 +174,16 @@ RESOLUTION_AGENT = {
         "if the sheet has both, plus source file, sheet, row, and "
         "value/range -- and a list of anything left unresolved. Drafting "
         "will use the alias you record here, never the ID, so get the "
-        "alias right.\n\n" + _RETURN_SUMMARY_ONLY
+        "alias right.\n\n"
+        "The domain-knowledge skill lists this run's automotive domain's "
+        "common signal/command naming conventions and terminology "
+        "pitfalls -- use it to recognize a plausible search term variation "
+        "(e.g. a known synonym or abbreviation for this domain) before "
+        "giving up on a term as unresolved, but never as a substitute for "
+        "an actual verbatim match in a supporting document.\n\n" + _RETURN_SUMMARY_ONLY
     ),
     "tools": [search_sheet, read_sheet_range, preview_sheet, list_workbook_sheets],
-    "skills": ["resolution-playbook"],
+    "skills": ["resolution-playbook", "domain-knowledge"],
 }
 
 TEST_CASE_DRAFTING_AGENT = {
@@ -198,10 +219,16 @@ TEST_CASE_DRAFTING_AGENT = {
         "say so plainly in your summary so the orchestrator can apply the "
         "critical-retry policy rather than silently shipping it.\n\n"
         "Append the JSON object to draft_testcases.jsonl in the run "
-        "workspace.\n\n" + _RETURN_SUMMARY_ONLY
+        "workspace.\n\n"
+        "The domain-knowledge skill's typical requirement/test-scenario "
+        "patterns, common preconditions, and priority/safety notes for "
+        "this run's automotive domain can help phrase a realistic "
+        "Test Precondition or justify a Priority -- but never invent a "
+        "precondition or signal from it that resolution didn't actually "
+        "confirm for this requirement.\n\n" + _RETURN_SUMMARY_ONLY
     ),
     "tools": [],
-    "skills": ["writing-style", "output-format"],
+    "skills": ["writing-style", "output-format", "domain-knowledge"],
 }
 
 QA_VALIDATION_AGENT = {
