@@ -99,7 +99,8 @@ early and pass along relevant context to subagents when you delegate.
    rather than looping forever.
 9. Once QA passes (or retries are exhausted), read draft_testcases.jsonl
    yourself from the run workspace, call write_output_workbook exactly
-   once with the final row set and the given output path.
+   once with the final row set. Its destination is fixed for this run --
+   the tool takes no path argument, so there's nothing to get wrong there.
 10. Write run_summary.json to the run workspace: counts of requirements
     found, qualifying rows, clusters/test cases generated, traceability
     coverage percentage, unresolved items, any QA warnings that remained,

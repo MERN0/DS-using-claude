@@ -29,9 +29,9 @@ from deepagents.backends.filesystem import FilesystemBackend
 from langchain_openai import ChatOpenAI
 
 from sys5_agent.agent.prompts import ORCHESTRATOR_SYSTEM_PROMPT
-from sys5_agent.agent.subagents import ALL_SUBAGENTS
+from sys5_agent.agent.subagents import build_subagents
 from sys5_agent.config import settings
-from sys5_agent.tools.excel_tools import write_output_workbook
+from sys5_agent.tools.excel_tools import build_write_tool
 
 
 def _new_run_dir() -> Path:
@@ -102,16 +102,28 @@ def _copy_layered_skills(run_dir: Path, client: str, domain: str) -> None:
         _copy_skill_overrides(dest, settings.client_dir(client) / "skills")
 
 
-def build_agent(client: str, domain: str):
+def build_agent(client: str, domain: str, input_dir: Path, output_path: Path):
     """Build a fresh deep agent + its run workspace directory for one run.
 
     `domain` is the automotive domain for this run (e.g. "bcm", "adas") --
     it stays constant for the whole cycle and determines which
     domain-knowledge skill gets loaded.
 
+    `input_dir` and `output_path` bound this run's real filesystem access:
+    every excel tool the orchestrator and its subagents get is built by a
+    factory closed over these two paths (see `tools/excel_tools.py`), so the
+    agent can read only inside `input_dir` and can only ever write to
+    `output_path` -- never anywhere else on disk. This is on top of (not a
+    replacement for) the run workspace's own `virtual_mode` sandbox below.
+
     Returns (agent, run_dir).
     """
     domain = settings.normalize_domain(domain)
+    input_dir = Path(input_dir).resolve()
+    if not input_dir.is_dir():
+        raise ValueError(f"input_dir does not exist or is not a directory: {input_dir}")
+    output_path = Path(output_path).resolve()
+
     run_dir = _new_run_dir()
     _write_layered_memory(run_dir, client, domain)
     _copy_layered_skills(run_dir, client, domain)
@@ -131,12 +143,12 @@ def build_agent(client: str, domain: str):
 
     agent = create_deep_agent(
         model=llm,
-        tools=[write_output_workbook],
+        tools=[build_write_tool(output_path)],
         system_prompt=ORCHESTRATOR_SYSTEM_PROMPT,
         backend=backend,
         memory=["memory/AGENTS.md"],
         skills=["skills/"],
-        subagents=ALL_SUBAGENTS,
+        subagents=build_subagents(input_dir),
         debug=settings.DEBUG,
     )
 
