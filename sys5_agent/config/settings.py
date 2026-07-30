@@ -9,6 +9,7 @@ editing the defaults below.
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -22,6 +23,53 @@ DEFAULT_CLIENT_DIR_NAME = "_default"
 
 RUNS_DIR = REPO_ROOT / "runs"
 OUTPUT_DIR = REPO_ROOT / "output"
+
+# Allowed shape for a client/project name or domain key once it's about to be
+# joined onto CLIENTS_DIR/DOMAINS_DIR: letters, digits, '_', '-', '.' only.
+# This is a hard backstop against path traversal (e.g. a project_name of
+# "../../etc" from a calling backend) landing inside a Path join -- it is
+# NOT primarily a UX validation, callers should still give a real name.
+_SAFE_NAME_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]*$")
+
+
+def _validate_safe_name(name: str, label: str) -> str:
+    name = str(name).strip()
+    if not name or not _SAFE_NAME_RE.match(name) or ".." in name:
+        raise ValueError(
+            f"Invalid {label} {name!r}: must contain only letters, digits, "
+            "'_', '-', '.' (no path separators, no '..')."
+        )
+    return name
+
+# ---------------------------------------------------------------------------
+# Automotive domains
+# ---------------------------------------------------------------------------
+
+# A domain is passed once at the start of a run (--domain) and stays constant
+# for the whole cycle. Each domain has a domains/<name>/skills/domain-knowledge/
+# SKILL.md carrying the detailed items (ECUs/modules, signal/command naming
+# conventions, buses, typical requirement/test patterns, terminology
+# pitfalls) for that domain -- loaded on demand like any other skill, not
+# preloaded into every turn's context.
+DOMAINS_DIR = REPO_ROOT / "domains"
+
+DOMAINS = ["bcm", "ivi", "ev", "powertrain", "adas", "chassis", "telematics"]
+
+DOMAIN_LABELS = {
+    "bcm": "Body Control Module",
+    "ivi": "In-Vehicle Infotainment",
+    "ev": "Electric Vehicle powertrain, battery & charging",
+    "powertrain": "Powertrain (engine, transmission & driveline)",
+    "adas": "Advanced Driver Assistance Systems",
+    "chassis": "Chassis & vehicle dynamics (braking, steering, suspension)",
+    "telematics": "Telematics & connectivity",
+}
+
+# Accepted alternate spellings/typos for --domain, normalized before lookup
+# (e.g. the common misspelling of "chassis").
+DOMAIN_ALIASES = {
+    "chasis": "chassis",
+}
 
 # ---------------------------------------------------------------------------
 # LLM endpoint (self-hosted Qwen, OpenAI-compatible)
@@ -92,13 +140,30 @@ QUALIFICATION_MARKERS = [
 ]
 
 # ---------------------------------------------------------------------------
-# Output contract -- the fixed 12-column SYS5 template
+# Check type classification
+# ---------------------------------------------------------------------------
+
+# The fixed set of check types a test case can perform. Every qualifying
+# requirement is classified against these (one or more, per its description)
+# during extraction; a requirement needing more than one check type produces
+# one test case per applicable type -- see the merging-strategy skill.
+CHECK_TYPES = [
+    "Boundary Value Check",
+    "Invalid Values Check",
+    "Functionality Check",
+    "Stress Test",
+    "Load Test",
+]
+
+# ---------------------------------------------------------------------------
+# Output contract -- the fixed 13-column SYS5 template
 # ---------------------------------------------------------------------------
 
 OUTPUT_COLUMNS = [
     "Test Case ID",
     "Feature/Module",
     "Variant",
+    "Check Type",
     "Traceability",
     "Test Case Objective",
     "Test Case Description",
@@ -112,6 +177,11 @@ OUTPUT_COLUMNS = [
 
 OUTPUT_SHEET_NAME = "SYS5_Test_Cases"
 
+# Output file formats the write tool actually knows how to produce. Kept as
+# an explicit whitelist (rather than accepting any extension a caller passes)
+# since only xlsx is implemented today.
+SUPPORTED_OUTPUT_FORMATS = ["xlsx"]
+
 # ---------------------------------------------------------------------------
 # Misc
 # ---------------------------------------------------------------------------
@@ -120,11 +190,30 @@ DEBUG = os.environ.get("SYS5_DEBUG", "0") == "1"
 
 
 def client_dir(client: str) -> Path:
-    """Resolve a client name to its clients/<name> directory, falling back
-    to the client's own dir even if it doesn't exist yet (caller decides how
-    to handle a missing client)."""
-    return CLIENTS_DIR / client
+    """Resolve a client/project name to its clients/<name> directory, falling
+    back to the client's own dir even if it doesn't exist yet (caller decides
+    how to handle a missing client). Raises ValueError if `client` isn't a
+    safe path segment (see _validate_safe_name)."""
+    return CLIENTS_DIR / _validate_safe_name(client, "client/project name")
 
 
 def default_client_dir() -> Path:
     return CLIENTS_DIR / DEFAULT_CLIENT_DIR_NAME
+
+
+def normalize_domain(domain: str) -> str:
+    """Lowercase/trim a --domain value and resolve known aliases/typos
+    (e.g. "chasis" -> "chassis") to the canonical domain key."""
+    key = domain.strip().lower()
+    return DOMAIN_ALIASES.get(key, key)
+
+
+def domain_dir(domain: str) -> Path:
+    """Resolve a domain name to its domains/<name> directory, falling back
+    to the domain's own dir even if it doesn't exist yet (caller decides how
+    to handle an unknown domain). Raises ValueError if `domain` isn't a safe
+    path segment (see _validate_safe_name) -- this does NOT check `domain`
+    is one of the recognized DOMAINS; callers should validate that
+    separately (e.g. `normalize_domain(domain) in DOMAINS`) when they need a
+    hard "unsupported domain" error rather than just a missing directory."""
+    return DOMAINS_DIR / _validate_safe_name(normalize_domain(domain), "domain")

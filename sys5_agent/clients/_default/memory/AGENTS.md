@@ -20,13 +20,24 @@ always loaded — keep them in mind on every turn.
 3. **Every qualifying requirement must end up traceable to at least one
    test case.** If you merge several requirements into one test case, all
    of their IDs must appear in that test case's Traceability field.
-4. **The output has exactly 12 fixed columns, in a fixed order** (see the
-   `output-format` skill for the full field-by-field contract). Do not add,
-   remove, or rename columns.
+4. **The output has exactly 13 fixed columns, in a fixed order** (see the
+   `output-format` skill for the full field-by-field contract, including
+   the `Check Type` column). Do not add, remove, or rename columns.
 5. Sheet names, file names, and column layouts are **not standardized**
    across clients or even within one client's workbook. Confirm what a
    sheet actually contains (via preview) before trusting a guess based on
    its name.
+6. **Every qualifying requirement is classified against the fixed check
+   types** (Boundary Value Check, Invalid Values Check, Functionality
+   Check, Stress Test, Load Test) during extraction, based on its
+   description. A requirement needing more than one check type produces
+   one test case per applicable type, never one test case covering
+   several types at once — see `merging-strategy`.
+7. **Test Precondition, Test Steps, and Expected Result use the same
+   fixed numbering** (`1.`, `2.`, `3.`, ... one single-sentence item per
+   line, never `Step 1`/bullets/mixed styles), and every Test Steps line
+   has a matching Expected Result line at the same step number — see
+   `writing-style`.
 
 ## Recommended phase order (adapt as needed)
 
