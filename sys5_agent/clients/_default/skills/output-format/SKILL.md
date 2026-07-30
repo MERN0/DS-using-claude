@@ -1,11 +1,11 @@
 ---
 name: output-format
-description: The canonical definition of the 12 fixed SYS5 output columns and what a complete, valid value looks like for each. Use during drafting and QA validation to check a test case is structurally complete before it's written to the output workbook.
+description: The canonical definition of the 13 fixed SYS5 output columns (including Check Type) and what a complete, valid value looks like for each. Use during drafting and QA validation to check a test case is structurally complete before it's written to the output workbook.
 ---
 
 # Output Format Contract
 
-Every test case is exactly one row with these 12 columns, in this exact
+Every test case is exactly one row with these 13 columns, in this exact
 order. Column names are fixed — do not rename, reorder, add, or remove.
 
 1. **Test Case ID** — unique, stable identifier for this test case (e.g.
@@ -15,23 +15,35 @@ order. Column names are fixed — do not rename, reorder, add, or remove.
 3. **Variant** — product/vehicle variant this test case applies to, if the
    source distinguishes variants; otherwise `All` / `N/A` as appropriate
    for this client (check client override).
-4. **Traceability** — every source requirement ID covered by this test
+4. **Check Type** — one or more of the fixed check types (see
+   `CHECK_TYPES` in config): `Boundary Value Check`, `Invalid Values
+   Check`, `Functionality Check`, `Stress Test`, `Load Test`. Comma-
+   separated only in the rare case a single test case genuinely can't be
+   split (see `merging-strategy`); normally one test case targets exactly
+   one check type, and a requirement needing several types produces one
+   test case per type. Never blank, and never a value outside this fixed
+   list.
+5. **Traceability** — every source requirement ID covered by this test
    case, comma-separated if merged. Never blank for a generated test case.
-5. **Test Case Objective** — one sentence, why this test exists.
-6. **Test Case Description** — short paragraph, what scenario is exercised.
-7. **Test Precondition** — system state required before execution.
-8. **Test Input Data** — resolved alias(es) and exact values to apply —
+6. **Test Case Objective** — one sentence, why this test exists.
+7. **Test Case Description** — short paragraph, what scenario is exercised.
+8. **Test Precondition** — numbered list (`1.`, `2.`, `3.`, ... — see
+   `writing-style`'s fixed numbering scheme) of system state required
+   before execution, one clause per line.
+9. **Test Input Data** — resolved alias(es) and exact values to apply —
    alias + parameters only (see below), not a raw ID or description.
-9. **Test Steps** — numbered `SET`/`WAIT`/`VERIFY` commands only, one per
-   step; see `writing-style` for the exact syntax. Never a sentence.
-10. **Expected Result** — the corresponding `VERIFY` line(s) restated with
-    expected parameters; see `writing-style`. Never a sentence.
-11. **Mode of Execution** — how the test is run (e.g. `Manual`,
+10. **Test Steps** — numbered `SET`/`WAIT`/`VERIFY` commands only, one per
+    step, using the fixed `1.`/`2.`/`3.` numbering; see `writing-style` for
+    the exact syntax. Never a sentence.
+11. **Expected Result** — one line per Test Steps line, same numbering and
+    step count, describing that step's expected outcome; see
+    `writing-style`. Never a sentence, never fewer lines than Test Steps.
+12. **Mode of Execution** — how the test is run (e.g. `Manual`,
     `Automated`/bench, as applicable).
-12. **Priority** — severity/priority as given or reasonably inferred (see
+13. **Priority** — severity/priority as given or reasonably inferred (see
     `writing-style` skill for the fallback rule).
 
-## Alias-only rule (anti-hallucination, applies to columns 8-10)
+## Alias-only rule (anti-hallucination, applies to columns 9-11)
 
 Every signal/command referenced in Test Input Data, Test Steps, or Expected
 Result must be:
@@ -48,14 +60,19 @@ Result must be:
 
 ## Definition of "complete" for QA purposes
 
-A row is structurally valid when: all 12 columns are non-empty, Test Case
-ID is unique in the file, Traceability lists only requirement IDs that were
-actually extracted as qualifying in this run, Test Steps/Expected Result
-use only the `SET`/`WAIT`/`VERIFY` syntax (no free-text sentences), and
-every alias named in Test Input Data / Test Steps / Expected Result was
-confirmed during resolution by alias (not invented, not a raw ID). A row
-failing any of these checks should be flagged by QA, not written to the
-final output as-is.
+A row is structurally valid when: all 13 columns are non-empty, Test Case
+ID is unique in the file, Check Type contains only values from the fixed
+`CHECK_TYPES` list, Traceability lists only requirement IDs that were
+actually extracted as qualifying in this run, Test Precondition/Test
+Steps/Expected Result all use the fixed `1.`/`2.`/`3.` numbering (never
+`Step 1`, bullets, or any other style — see `writing-style`), Test Steps
+and Expected Result have the exact same number of lines with matching step
+numbers (every step has a corresponding expected-result line and vice
+versa), Test Steps/Expected Result use only the `SET`/`WAIT`/`VERIFY`
+syntax (no free-text sentences), and every alias named in Test Input Data
+/ Test Steps / Expected Result was confirmed during resolution by alias
+(not invented, not a raw ID). A row failing any of these checks should be
+flagged by QA, not written to the final output as-is.
 
 ## Incomplete / failed critical test cases
 

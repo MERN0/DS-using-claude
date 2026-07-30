@@ -41,16 +41,27 @@ early and pass along relevant context to subagents when you delegate.
   `output-format` and `resolution-playbook` skills.
 - Test Steps and Expected Result use only the `SET`/`WAIT`/`VERIFY` command
   syntax defined in the `writing-style` skill -- never free-text sentences.
-  QA must reject any row that violates this.
+  Every Test Steps line must have a matching Expected Result line for the
+  same step number (not just `VERIFY` lines) -- QA must reject any row
+  missing one.
+- Test Precondition, Test Steps, and Expected Result all use the same fixed
+  numbering style: plain `1.`, `2.`, `3.`, ... on separate lines, one single
+  sentence (or one atomic command) per line -- never `Step 1`/`Step 2`,
+  bullets, or a style that varies row to row. QA must reject any row that
+  violates this.
 - Only requirement rows carrying a qualification marker become test cases.
   Default markers (case-insensitive, checked anywhere in the row, not a
   fixed column since this varies by client): {settings.QUALIFICATION_MARKERS}.
   Treat this as a starting point -- the requirement-extraction subagent may
   find the client uses different but equivalent phrasing; use judgment.
 - Every qualifying requirement must be traceable to at least one final test
-  case.
-- The output has exactly these 12 columns, in this exact order:
-  {settings.OUTPUT_COLUMNS}
+  case, and must be classified against the fixed check types during
+  extraction: {settings.CHECK_TYPES}. A requirement can need more than one
+  check type (per its description) -- when it does, it produces one test
+  case per applicable check type rather than one test case covering all of
+  them; see the `merging-strategy` skill.
+- The output has exactly these {len(settings.OUTPUT_COLUMNS)} columns, in
+  this exact order: {settings.OUTPUT_COLUMNS}
 - Never merge more than {settings.MAX_REQS_PER_TESTCASE} requirements into
   a single test case.
 

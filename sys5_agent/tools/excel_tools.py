@@ -42,7 +42,7 @@ _BORDER = Border(left=_THIN_SIDE, right=_THIN_SIDE, top=_THIN_SIDE, bottom=_THIN
 # Per-column width in characters. Narrow identifier/enum-like columns stay
 # compact; free-text columns get more room (and rely on wrap_text + row
 # height rather than becoming unreadably wide).
-_NARROW_COLUMNS = {"Test Case ID", "Variant", "Mode of Execution", "Priority"}
+_NARROW_COLUMNS = {"Test Case ID", "Variant", "Check Type", "Mode of Execution", "Priority"}
 _WIDE_COLUMNS = {
     "Test Case Description",
     "Test Precondition",
@@ -362,7 +362,8 @@ def search_sheet(
 def write_output_workbook(rows: list[dict], output_path: str) -> str:
     """Write the final, QA-validated test cases to the output .xlsx file.
 
-    This enforces the fixed 12-column SYS5 template regardless of what keys
+    This enforces the fixed SYS5 template column set (see
+    config.settings.OUTPUT_COLUMNS) regardless of what keys
     the caller used internally -- pass a dict per row using the exact
     OUTPUT_COLUMNS names (case-insensitive, whitespace-tolerant matching is
     applied). Only call this once, after QA validation has passed, and only

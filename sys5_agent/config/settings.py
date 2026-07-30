@@ -122,13 +122,30 @@ QUALIFICATION_MARKERS = [
 ]
 
 # ---------------------------------------------------------------------------
-# Output contract -- the fixed 12-column SYS5 template
+# Check type classification
+# ---------------------------------------------------------------------------
+
+# The fixed set of check types a test case can perform. Every qualifying
+# requirement is classified against these (one or more, per its description)
+# during extraction; a requirement needing more than one check type produces
+# one test case per applicable type -- see the merging-strategy skill.
+CHECK_TYPES = [
+    "Boundary Value Check",
+    "Invalid Values Check",
+    "Functionality Check",
+    "Stress Test",
+    "Load Test",
+]
+
+# ---------------------------------------------------------------------------
+# Output contract -- the fixed 13-column SYS5 template
 # ---------------------------------------------------------------------------
 
 OUTPUT_COLUMNS = [
     "Test Case ID",
     "Feature/Module",
     "Variant",
+    "Check Type",
     "Traceability",
     "Test Case Objective",
     "Test Case Description",
