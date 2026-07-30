@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.Python
+*.egg-info/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Per-run generated workspaces and outputs (not source)
+sys5_agent/runs/*
+!sys5_agent/runs/.gitkeep
+sys5_agent/output/*
+!sys5_agent/output/.gitkeep
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local secrets/env
+.env
+
+# Archive/backup blobs
+*.zip

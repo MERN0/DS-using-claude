@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(claude mcp *)",
+      "PowerShell(claude mcp add --transport http docs-langchain https://docs.langchain.com/mcp)",
+      "PowerShell(claude mcp add --transport http reference-langchain https://reference.langchain.com/mcp)"
+    ]
+  }
+}
