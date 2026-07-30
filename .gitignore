@@ -224,10 +224,10 @@ __marimo__/
 Thumbs.db
 
 # Per-run generated workspaces and outputs (not source)
-sys5_agent/runs/*
-!sys5_agent/runs/.gitkeep
-sys5_agent/output/*
-!sys5_agent/output/.gitkeep
+backend/code/artifacts/SYS5/sys5_agent/runs/*
+!backend/code/artifacts/SYS5/sys5_agent/runs/.gitkeep
+backend/code/artifacts/SYS5/sys5_agent/output/*
+!backend/code/artifacts/SYS5/sys5_agent/output/.gitkeep
 
 # Archive/backup blobs
 *.zip

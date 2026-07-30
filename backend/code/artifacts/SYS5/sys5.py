@@ -27,13 +27,17 @@ import sys
 from pathlib import Path
 from typing import Any
 
-# This file lives four levels below the repo root
-# (backend/code/artifacts/SYS5/sys5.py), which is not on sys.path by
-# default -- add the repo root so `import sys5_agent` works regardless of
-# how/where the backend imports this module from.
-_REPO_ROOT = Path(__file__).resolve().parents[4]
-if str(_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT))
+# `sys5_agent` lives right next to this file (backend/code/artifacts/SYS5/
+# sys5_agent/), not on sys.path by default -- add this file's own directory
+# so `import sys5_agent` resolves there regardless of whether the backend
+# imports this module as `backend.code.artifacts.SYS5.sys5`, runs from the
+# `backend/` directory, or anything else. Deriving this from `__file__`
+# (rather than assuming a fixed depth from some repo root) is what lets the
+# whole SYS5 pipeline live self-contained under `backend/` and be moved
+# without touching this bootstrap again.
+_PACKAGE_ROOT = Path(__file__).resolve().parent
+if str(_PACKAGE_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PACKAGE_ROOT))
 
 from sys5_agent.agent.runner import run_pipeline  # noqa: E402
 from sys5_agent.config import settings  # noqa: E402
