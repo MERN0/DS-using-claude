@@ -41,15 +41,22 @@ as a resolution failure for requirements that don't need that type.
 4. Stop after a bounded number of attempts (see `MAX_RESOLUTION_ATTEMPTS`
    in config). If still unresolved, record the item as `unresolved` with
    the search terms you tried — do not substitute a similar-looking name.
-5. Record every resolved item with its exact verbatim name, source file,
-   sheet, and row, so drafting and QA can both verify it later without
-   re-searching.
+5. Record every resolved item with its **alias** (the short name/label
+   column, e.g. "Name"/"Alias"/"Signal Name" as the sheet actually calls
+   it) *and*, separately, its raw ID/address if the sheet has one, plus
+   source file, sheet, and row — so drafting and QA can both verify it
+   later without re-searching. If a sheet has no distinct alias column,
+   the alias is whatever short name the sheet actually uses to refer to
+   the item in prose/lookups elsewhere in the document — never the row's
+   raw numeric ID or bus address used as a stand-in alias.
 
 ## Hard constraint
 
-Only signal/command/parameter names that were actually found via this
+Only signals/commands/parameters that were actually found via this
 procedure may appear in a test case's Test Input Data, Test Steps, or
-Expected Result. If a requirement can't be fully resolved, still draft the
-test case for the parts that *are* resolved, and clearly flag the
-unresolved portion rather than silently dropping it or inventing a
-plausible name.
+Expected Result — and only by their **alias**, never their raw ID, address,
+or full row/definition dump (the ID stays in `resolved/<cluster_id>.md` for
+traceability, not in the drafted test case). If a requirement can't be
+fully resolved, still draft the test case for the parts that *are*
+resolved, and clearly flag the unresolved portion rather than silently
+dropping it or inventing a plausible name.

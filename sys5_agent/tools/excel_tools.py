@@ -21,9 +21,78 @@ from typing import Any, Optional
 
 from langchain_core.tools import tool
 from openpyxl import Workbook, load_workbook
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.worksheet import Worksheet
 
 from sys5_agent.config import settings
+
+# ---------------------------------------------------------------------------
+# Output workbook styling (cosmetic only -- never touches cell content)
+# ---------------------------------------------------------------------------
+
+_HEADER_FILL = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
+_HEADER_FONT = Font(bold=True, color="FFFFFF", size=11)
+_HEADER_ALIGNMENT = Alignment(horizontal="center", vertical="center", wrap_text=True)
+_BODY_ALIGNMENT = Alignment(horizontal="left", vertical="top", wrap_text=True)
+_ZEBRA_FILL = PatternFill(start_color="F2F6FA", end_color="F2F6FA", fill_type="solid")
+_THIN_SIDE = Side(style="thin", color="B7C3CC")
+_BORDER = Border(left=_THIN_SIDE, right=_THIN_SIDE, top=_THIN_SIDE, bottom=_THIN_SIDE)
+
+# Per-column width in characters. Narrow identifier/enum-like columns stay
+# compact; free-text columns get more room (and rely on wrap_text + row
+# height rather than becoming unreadably wide).
+_NARROW_COLUMNS = {"Test Case ID", "Variant", "Mode of Execution", "Priority"}
+_WIDE_COLUMNS = {
+    "Test Case Description",
+    "Test Precondition",
+    "Test Input Data",
+    "Test Steps",
+    "Expected Result",
+}
+_MIN_WIDTH = 14
+_NARROW_WIDTH = 16
+_WIDE_WIDTH = 48
+_DEFAULT_WIDTH = 28
+_ROW_HEIGHT = 90
+
+
+def _beautify_workbook(ws: Worksheet, columns: list[str], row_count: int) -> None:
+    """Apply a readable default style to the freshly written output sheet.
+
+    Purely cosmetic: header styling, column widths sized to field type,
+    wrapped/top-aligned body cells, thin borders, zebra striping, a frozen
+    header row, and an autofilter -- none of it changes any cell value.
+    """
+    for col_idx, name in enumerate(columns, start=1):
+        letter = get_column_letter(col_idx)
+        header_cell = ws.cell(row=1, column=col_idx)
+        header_cell.fill = _HEADER_FILL
+        header_cell.font = _HEADER_FONT
+        header_cell.alignment = _HEADER_ALIGNMENT
+        header_cell.border = _BORDER
+
+        if name in _WIDE_COLUMNS:
+            width = _WIDE_WIDTH
+        elif name in _NARROW_COLUMNS:
+            width = _NARROW_WIDTH
+        else:
+            width = _DEFAULT_WIDTH
+        ws.column_dimensions[letter].width = max(width, _MIN_WIDTH)
+
+    for row_idx in range(2, row_count + 2):
+        ws.row_dimensions[row_idx].height = _ROW_HEIGHT
+        is_zebra = (row_idx % 2) == 0
+        for col_idx in range(1, len(columns) + 1):
+            cell = ws.cell(row=row_idx, column=col_idx)
+            cell.alignment = _BODY_ALIGNMENT
+            cell.border = _BORDER
+            if is_zebra:
+                cell.fill = _ZEBRA_FILL
+
+    ws.freeze_panes = "A2"
+    last_col_letter = get_column_letter(len(columns))
+    ws.auto_filter.ref = f"A1:{last_col_letter}{row_count + 1}"
 
 
 def _dump(obj: Any) -> str:
@@ -299,6 +368,11 @@ def write_output_workbook(rows: list[dict], output_path: str) -> str:
     applied). Only call this once, after QA validation has passed, and only
     with the final row set.
 
+    The written sheet is also formatted for readability: styled/frozen
+    header row, per-column widths sized to field type, wrapped body text,
+    zebra striping, borders, and an autofilter -- cosmetic only, it never
+    alters a cell's value.
+
     Args:
         rows: List of dicts, one per test case, keyed by column name (see
             config.settings.OUTPUT_COLUMNS for the exact expected names).
@@ -334,6 +408,8 @@ def write_output_workbook(rows: list[dict], output_path: str) -> str:
         if missing:
             warnings.append(f"Row {i + 1}: missing columns {missing}, written blank")
         ws.append(line)
+
+    _beautify_workbook(ws, settings.OUTPUT_COLUMNS, len(rows))
 
     wb.save(out)
     return _dump({"output_path": str(out), "row_count": len(rows), "warnings": warnings})

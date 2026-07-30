@@ -19,6 +19,17 @@ import json
 import sys
 from pathlib import Path
 
+# Internal modules are imported as `sys5_agent.*` (see agent/build.py,
+# agent/prompts.py, agent/subagents.py, tools/excel_tools.py) so that a
+# single import style works whether this is run as `python -m sys5_agent.main`
+# or `python main.py`/`python sys5_agent/main.py` directly. The latter forms
+# only put this file's own directory on sys.path, not its parent, so
+# `import sys5_agent` would otherwise fail -- make sure the package's parent
+# directory is importable before pulling in any sys5_agent.* module.
+_PACKAGE_PARENT = Path(__file__).resolve().parent.parent
+if str(_PACKAGE_PARENT) not in sys.path:
+    sys.path.insert(0, str(_PACKAGE_PARENT))
+
 from sys5_agent.agent.build import build_agent
 from sys5_agent.config import settings
 
