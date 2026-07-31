@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from sys5_agent.agent.build import build_agent
+from sys5_agent.agent.progress import ProgressLogger
 
 
 def run_pipeline(
@@ -45,7 +46,19 @@ def run_pipeline(
     Raises only for a build-time configuration error (invalid client/domain,
     missing input_dir -- see `build_agent`), which is the caller's bug to
     fix before a run even starts. A *generation* failure (missing output,
-    QA issues) is never raised -- it's reported in the returned dict.
+    QA issues, or the agent run itself raising -- e.g. a `deepagents`/model
+    provider error mid-run) is never raised -- it's reported in the returned
+    dict, with `final_message` carrying the error detail when there's no
+    orchestrator message to fall back on. A single bad tool call (or worse,
+    a bug in a dependency) losing one run's progress is one thing; letting
+    that same exception propagate and take down the caller's whole process
+    is a much bigger one, and there's no reason the latter has to follow
+    from the former.
+
+    Prints one line per tool call (including every subagent's own calls) to
+    stdout as the run progresses -- see `agent/progress.py` -- since
+    `agent.invoke(...)` would otherwise be silent for the run's entire
+    duration.
     """
     agent, run_dir = build_agent(client, domain, input_dir, output_path)
 
@@ -64,18 +77,38 @@ def run_pipeline(
         "following your system instructions."
     )
 
-    result = agent.invoke(
-        {"messages": [{"role": "user", "content": task_message}]},
-        config={"configurable": {"thread_id": run_dir.name}, "recursion_limit": 1000},
-    )
+    print(f"Run workspace: {run_dir}", flush=True)
+
+    crash_message: Optional[str] = None
+    result: dict[str, Any] = {}
+    try:
+        result = agent.invoke(
+            {"messages": [{"role": "user", "content": task_message}]},
+            config={
+                "configurable": {"thread_id": run_dir.name},
+                "recursion_limit": 1000,
+                "callbacks": [ProgressLogger()],
+            },
+        )
+    except Exception as e:  # noqa: BLE001 -- deliberately broad, see docstring
+        # A run that gets this far has usually already burned real time and
+        # money (many model calls deep into discovery/extraction/resolution)
+        # -- losing that is bad enough without also crashing whatever process
+        # called `run_pipeline` (the backend service, the CLI). Whatever
+        # actually broke (a dependency bug, a provider-side rejection, a
+        # tool escaping in a way nothing here caught) is reported the same
+        # way any other generation failure is: in the returned dict, never
+        # by propagating.
+        crash_message = f"Agent run raised {type(e).__name__}: {e}"
+        print(f"[{run_dir.name}] !!! run crashed: {crash_message}", flush=True)
 
     summary_path = run_dir / "run_summary.json"
     summary: Optional[dict] = None
     if summary_path.is_file():
         summary = json.loads(summary_path.read_text(encoding="utf-8"))
 
-    final_message = None
-    if result.get("messages"):
+    final_message = crash_message
+    if final_message is None and result.get("messages"):
         final_message = result["messages"][-1].content
 
     output_written_this_run = output_path.is_file() and (
