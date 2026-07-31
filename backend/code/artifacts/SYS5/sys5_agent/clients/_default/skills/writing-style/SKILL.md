@@ -42,13 +42,17 @@ Test Steps must be written as a numbered sequence of atomic commands using
 narrative instruction; if an action doesn't reduce to one of these three,
 split it into more steps until it does.
 
-- `SET <alias>, <parameter(s)>` — apply a value to a signal/command.
-  e.g. `1. SET DoorLockCmd, LOCK`
+- `SET <alias> = <parameter(s)>` — apply a value to a signal/command. `=`
+  is the fixed assignment operator; never a comma, never the word "to".
+  e.g. `1. SET DoorLockCmd = LOCK`
 - `WAIT <duration>` — pause a fixed time before the next command.
   e.g. `2. WAIT 500ms`
-- `VERIFY <alias>, <expected parameter(s)>` — read back and check a
-  signal/response.
-  e.g. `3. VERIFY DoorLockStatus, LOCKED`
+- `VERIFY <alias> == <expected parameter(s)>` — read back and check a
+  signal/response. `==` is the fixed comparison operator, distinct from
+  `SET`'s `=` on purpose (an assignment and a check are different
+  operations and must not share a symbol); never a comma, never "is"/
+  "equals" in prose.
+  e.g. `3. VERIFY DoorLockStatus == LOCKED`
 
 Rules:
 
@@ -59,6 +63,10 @@ Rules:
   address, or raw signal definition. If a supporting document only exposes
   an ID and no separate alias/name, use the resolution-playbook's fallback,
   not the ID.
+- `SET` always uses `=`; `VERIFY` always uses `==`. Never swap them, never
+  substitute a comma or a word ("to", "is", "equals") for either — this
+  distinction (assignment vs. comparison) must be visually unambiguous at
+  a glance, exactly like it would be in code.
 - No prose, no conjunctions ("and then"), no adjectives — parameters are
   exact resolved values/units, not descriptions ("a high value" is
   forbidden; the resolved value is not).
@@ -74,16 +82,17 @@ one sentence and uses only the resolved alias/parameters — no vague
 language like "works correctly".
 
 - After a `SET` step: state the resulting state as confirmed by that same
-  alias (or its paired status alias if resolution recorded one) —
-  e.g. step `1. SET DoorLockCmd, LOCK` → `1. DoorLockCmd is set to LOCK.`
+  alias (or its paired status alias if resolution recorded one), using the
+  same `==` comparison form as a `VERIFY` line —
+  e.g. step `1. SET DoorLockCmd = LOCK` → `1. DoorLockCmd == LOCK.`
   Never invent a status alias resolution didn't actually confirm; if none
   exists, restate the applied value itself as the expected outcome.
 - After a `WAIT` step: state that the duration elapses before the next
   command — e.g. step `2. WAIT 500ms` → `2. 500ms elapses.`
 - After a `VERIFY` step: restate the identical
-  `VERIFY <alias>, <expected parameter(s)>` form —
-  e.g. step `3. VERIFY DoorLockStatus, LOCKED` →
-  `3. VERIFY DoorLockStatus, LOCKED.`
+  `VERIFY <alias> == <expected parameter(s)>` form —
+  e.g. step `3. VERIFY DoorLockStatus == LOCKED` →
+  `3. VERIFY DoorLockStatus == LOCKED.`
 
 ## Check-type-driven wording
 
