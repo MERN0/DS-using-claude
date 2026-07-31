@@ -205,6 +205,19 @@ OUTPUT_SHEET_NAME = "SYS5_Test_Cases"
 # since only xlsx is implemented today.
 SUPPORTED_OUTPUT_FORMATS = ["xlsx"]
 
+# Fixed Test Case ID format: f"{TEST_CASE_ID_PREFIX}{n}" for n = 1, 2, 3...
+# in final output row order. write_output_workbook (tools/excel_tools.py)
+# assigns this itself, unconditionally overwriting whatever the drafting
+# agent put in that column -- that's deliberate, not a bug: it's the one
+# point in the pipeline that can actually guarantee both the fixed format
+# and uniqueness across the whole file in one place, rather than relying on
+# every drafting call (each running in its own isolated cluster, possibly
+# in parallel with others) to independently avoid colliding with IDs it has
+# no visibility into. Nothing else in the pipeline keys off Test Case ID
+# (Traceability tracks requirement IDs, resolution/QA key off cluster_id),
+# so overwriting it here has no downstream effect to account for.
+TEST_CASE_ID_PREFIX = "TC_SYS_"
+
 # ---------------------------------------------------------------------------
 # Misc
 # ---------------------------------------------------------------------------

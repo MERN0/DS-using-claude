@@ -362,10 +362,16 @@ orchestrator's own context small no matter how large the input file is.
 
 - **requirement-extraction-agent** — reads one bounded row range (never a
   whole large sheet at once) and pulls out only rows that carry a
-  qualification marker (case-insensitive, checked anywhere in the row).
-  For each, it derives a stable requirement ID, records the requirement
-  text/feature/variant/traceability, and classifies it against the five
-  fixed check types (a requirement can get more than one).
+  qualification marker (case-insensitive, checked anywhere in the row —
+  every populated cell, not one assumed column), preferring to treat a
+  close variant of the marker wording as qualifying rather than silently
+  excluding it. For each, it derives a stable requirement ID, records the
+  requirement text/feature/variant/traceability, and classifies it against
+  the five fixed check types (a requirement can get more than one). Its
+  summary explicitly echoes the row range it was asked to cover against the
+  range it actually covered, and the sheet's total row count
+  (`sheet_max_row`) — this is what lets the orchestrator (and QA) tell a
+  chunk that stopped short from one that genuinely found nothing.
 
 - **merge-planning-agent** — groups requirement IDs into clusters, one
   cluster per eventual test case, per the `merging-strategy` skill's
@@ -392,10 +398,17 @@ orchestrator's own context small no matter how large the input file is.
 - **qa-validation-agent** — cross-checks the *entire* draft set at once:
   traceability coverage, anti-hallucination (every referenced alias
   actually exists in that cluster's resolution), structural completeness
-  (all 13 columns non-empty, unique IDs, valid check types, consistent
-  numbering, one Expected Result line per Test Steps line). Reports PASS
-  or a list of issues grouped by `cluster_id` for the orchestrator to
-  target with retries.
+  (all 13 columns non-empty, valid check types, consistent numbering, one
+  Expected Result line per Test Steps line, the fixed `=`/`==` operators —
+  never a comma or "to"/"is"/"equals" standing in for either), and
+  extraction coverage — cross-referencing discovery.md's recorded row
+  count for the requirements sheet against `requirements_index.jsonl` to
+  catch a chunk that silently stopped short rather than assuming the rest
+  of the sheet simply had nothing else to qualify. (Test Case ID format/
+  uniqueness isn't QA's concern — `write_output_workbook` assigns it
+  unconditionally at write time, see [The tools](#the-tools).) Reports PASS
+  or a list of issues grouped by `cluster_id` (plus any coverage gap, noted
+  separately) for the orchestrator to target with retries.
 
 ## The tools
 
@@ -455,6 +468,17 @@ silently report a row number of `null` whenever the first cell in a row
 (column A) happened to be blank. `enumerate()` sidesteps this entirely by
 never asking a cell what its own position is.
 
+`list_workbook_sheets` and `read_sheet_range` also `print()` what they find
+— a sheet's total row count the moment it's known, and each chunk read
+against that total (`rows 41-80 of 404 total`) — directly to the terminal,
+independent of the `ProgressLogger` callback (see
+[Context management](#context-management)/progress logging above). This is
+what tells you, live, how many rows a long extraction pass actually has to
+get through. `read_sheet_range`'s JSON response also carries this as
+`sheet_max_row`, so the requirement-extraction-agent itself can reason
+about how much of the sheet it still has left to cover, not just a human
+watching the terminal.
+
 ### The write tool
 
 `write_output_workbook(rows)` — bound to exactly one output file (fixed at
@@ -465,6 +489,18 @@ column widths by field type, wrapped body text, zebra striping, borders,
 autofilter), and writes exactly one sheet. See
 [Output-file write safety](#output-file-write-safety) for how it protects
 against a corrupt/partial save being mistaken for success.
+
+It also unconditionally assigns **Test Case ID** itself —
+`f"{settings.TEST_CASE_ID_PREFIX}{n}"` (`TC_SYS_1`, `TC_SYS_2`, ... by
+default) in final row order — overwriting whatever value the caller
+supplied for that column. This is deliberate: it's the one place in the
+pipeline that can actually guarantee both a fixed format and uniqueness
+across the whole file in one step, rather than hoping every drafting call
+(each running in its own isolated cluster, sometimes in parallel with
+others with no visibility into each other's numbering) independently
+avoids colliding. Nothing else in the pipeline keys off Test Case ID —
+Traceability tracks requirement IDs, resolution/QA key off `cluster_id` —
+so overwriting it here has no downstream effect to account for.
 
 ## Skills & memory layering
 
@@ -514,12 +550,15 @@ past run's record of what rules it followed.
   procedure; record alias *and* raw ID separately.
 - **`writing-style`** — phrasing/tense/terminology conventions; the fixed
   `1.`/`2.`/`3.` numbering scheme; the mandatory `SET`/`WAIT`/`VERIFY`
-  syntax; check-type-driven wording (what a Boundary Value Check test
-  case's steps should look like vs. a Stress Test's).
+  syntax with its fixed `=` (assignment) / `==` (comparison) operators;
+  check-type-driven wording (what a Boundary Value Check test case's steps
+  should look like vs. a Stress Test's).
 - **`output-format`** — the canonical definition of all 13 output columns
-  and what "structurally complete" means for each, including the
-  alias-only anti-hallucination rule and how an unrecoverable `Critical`
-  item gets marked `[INCOMPLETE]`/`[FAILED]` instead of silently dropped.
+  and what "structurally complete" means for each, including the fixed
+  `TC_SYS_<n>` Test Case ID format (assigned automatically, not something
+  drafting needs to get right), the alias-only anti-hallucination rule, and
+  how an unrecoverable `Critical` item gets marked `[INCOMPLETE]`/`[FAILED]`
+  instead of silently dropped.
 
 ## Configuration reference
 
@@ -547,6 +586,7 @@ value is overridable via an environment variable.
 | `CHECK_TYPES` | *(code only)* | `Boundary Value Check`, `Invalid Values Check`, `Functionality Check`, `Stress Test`, `Load Test` | The fixed classification set every qualifying requirement is checked against. |
 | `OUTPUT_COLUMNS` | *(code only)* | 13 fixed column names | The output template — never renamed/reordered/added/removed. |
 | `OUTPUT_SHEET_NAME` | *(code only)* | `SYS5_Test_Cases` | Name of the single sheet in the output workbook. |
+| `TEST_CASE_ID_PREFIX` | *(code only)* | `TC_SYS_` | Prefix `write_output_workbook` uses when assigning `f"{prefix}{n}"` as every row's Test Case ID, in final row order — see [The tools](#the-tools). |
 | `SUPPORTED_OUTPUT_FORMATS` | *(code only)* | `["xlsx"]` | Whitelist of formats the write tool can actually produce. |
 | `DEBUG` | `SYS5_DEBUG` | `0` | Verbose `deepagents` debug output when `"1"`. |
 

@@ -8,8 +8,14 @@ description: The canonical definition of the 13 fixed SYS5 output columns (inclu
 Every test case is exactly one row with these 13 columns, in this exact
 order. Column names are fixed — do not rename, reorder, add, or remove.
 
-1. **Test Case ID** — unique, stable identifier for this test case (e.g.
-   `TC_<feature>_<sequence>`). Must be unique across the whole output file.
+1. **Test Case ID** — fixed format `TC_SYS_<n>` (e.g. `TC_SYS_1`,
+   `TC_SYS_2`, ...), assigned automatically by `write_output_workbook` in
+   final row order -- it overwrites whatever is passed in this column, so
+   don't spend effort inventing one during drafting or worry about
+   colliding with another cluster's numbering; any placeholder here is
+   fine. Nothing else in the pipeline keys off this value (Traceability
+   uses requirement IDs; resolution/QA key off `cluster_id`), so this is
+   the only column drafting truly cannot get wrong.
 2. **Feature/Module** — the feature or module this test case belongs to,
    taken from the requirement's tagging/section in the source document.
 3. **Variant** — product/vehicle variant this test case applies to, if the
@@ -56,21 +62,24 @@ Result must be:
   both, the alias is what goes in the test case; the ID is reference-only
   and stays in `resolved/<cluster_id>.md`, not in the output row.
 - **Given with its parameters, not the whole entry** — e.g. `SET
-  DoorLockCmd, LOCK`, not a dump of the command's full row/definition.
+  DoorLockCmd = LOCK`, not a dump of the command's full row/definition.
 
 ## Definition of "complete" for QA purposes
 
-A row is structurally valid when: all 13 columns are non-empty, Test Case
-ID is unique in the file, Check Type contains only values from the fixed
-`CHECK_TYPES` list, Traceability lists only requirement IDs that were
-actually extracted as qualifying in this run, Test Precondition/Test
-Steps/Expected Result all use the fixed `1.`/`2.`/`3.` numbering (never
-`Step 1`, bullets, or any other style — see `writing-style`), Test Steps
-and Expected Result have the exact same number of lines with matching step
-numbers (every step has a corresponding expected-result line and vice
-versa), Test Steps/Expected Result use only the `SET`/`WAIT`/`VERIFY`
-syntax (no free-text sentences), and every alias named in Test Input Data
-/ Test Steps / Expected Result was confirmed during resolution by alias
+A row is structurally valid when: all 13 columns are non-empty (Test Case
+ID is assigned automatically at write time -- see above -- so it's never
+actually missing or a duplicate by the time this matters), Check Type
+contains only values from the fixed `CHECK_TYPES` list, Traceability lists
+only requirement IDs that were actually extracted as qualifying in this
+run, Test Precondition/Test Steps/Expected Result all use the fixed
+`1.`/`2.`/`3.` numbering (never `Step 1`, bullets, or any other style —
+see `writing-style`), Test Steps and Expected Result have the exact same
+number of lines with matching step numbers (every step has a corresponding
+expected-result line and vice versa), Test Steps/Expected Result use only
+the `SET`/`WAIT`/`VERIFY` syntax with the fixed `=` (assignment) /
+`==` (comparison) operators -- no free-text sentences, no comma or word
+standing in for either operator -- and every alias named in Test Input
+Data/Test Steps/Expected Result was confirmed during resolution by alias
 (not invented, not a raw ID). A row failing any of these checks should be
 flagged by QA, not written to the final output as-is.
 

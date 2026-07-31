@@ -300,6 +300,13 @@ def build_read_only_tools(input_root: Path) -> list:
             for name in wb.sheetnames:
                 ws = wb[name]
                 out.append({"sheet_name": name, "max_row": ws.max_row, "max_col": ws.max_column})
+            # Printed here, not just returned, so the total row count a
+            # sheet actually has -- the number every later chunked read
+            # against it needs to iterate over -- is visible in the
+            # terminal the moment it's known, not just buried in a tool
+            # result the model may or may not restate.
+            dims = ", ".join(f"'{s['sheet_name']}': {s['max_row']} rows" for s in out)
+            print(f"[workbook] {p.name} -> {dims}", flush=True)
             return _dump(out)
         finally:
             wb.close()
@@ -380,7 +387,11 @@ def build_read_only_tools(input_root: Path) -> list:
 
         Returns:
             JSON {"sheet_name": str, "start_row": int, "end_row": int,
-            "truncated": bool, "rows": [{"row": int, "cells": {...}}]}.
+            "truncated": bool, "sheet_max_row": int, "rows": [{"row": int,
+            "cells": {...}}]}. `sheet_max_row` is the sheet's total row
+            count -- use it (and end_row against it) to know when you've
+            actually covered the whole sheet, rather than guessing when to
+            stop chunking.
         """
         p = _resolve_within(root, file_name)
         if p is None:
@@ -417,12 +428,18 @@ def build_read_only_tools(input_root: Path) -> list:
                             cells[letter] = _cell_str(cell.value)
                     rows_out.append({"row": row_idx, "cells": cells})
 
+            print(
+                f"[read_sheet_range] {p.name}::{sheet_name} rows {start_row}-{capped_end} "
+                f"of {max_row} total",
+                flush=True,
+            )
             return _dump(
                 {
                     "sheet_name": sheet_name,
                     "start_row": start_row,
                     "end_row": capped_end,
                     "truncated": truncated,
+                    "sheet_max_row": max_row,
                     "rows": rows_out,
                 }
             )
@@ -556,10 +573,18 @@ def build_write_tool(output_path: Path):
         text, zebra striping, borders, and an autofilter -- cosmetic only,
         it never alters a cell's value.
 
+        Test Case ID is assigned here, not by the caller: every row gets
+        `f"{settings.TEST_CASE_ID_PREFIX}{n}"` (e.g. `TC_SYS_1`, `TC_SYS_2`,
+        ...) in final row order, overwriting whatever the caller supplied
+        for that column -- this is the one place that can guarantee both
+        the fixed format and uniqueness across the whole file. Whatever
+        value is passed for "Test Case ID" is ignored.
+
         Args:
             rows: List of dicts, one per test case, keyed by column name
                 (see config.settings.OUTPUT_COLUMNS for the exact expected
-                names).
+                names). The "Test Case ID" key, if present, is ignored --
+                see above.
 
         Returns:
             On success: JSON {"output_path": str, "row_count": int,
@@ -578,6 +603,7 @@ def build_write_tool(output_path: Path):
         ws.title = settings.OUTPUT_SHEET_NAME
         ws.append(settings.OUTPUT_COLUMNS)
 
+        id_col_idx = settings.OUTPUT_COLUMNS.index("Test Case ID")
         warnings: list[str] = []
         for i, row in enumerate(rows):
             lookup = {str(k).strip().lower(): v for k, v in row.items()}
@@ -590,6 +616,12 @@ def build_write_tool(output_path: Path):
                 else:
                     line.append("")
                     missing.append(col)
+            # Always assigned here, never trusted from the caller -- see the
+            # docstring. Sequential and unique by construction, so it can
+            # never itself be "missing".
+            line[id_col_idx] = f"{settings.TEST_CASE_ID_PREFIX}{i + 1}"
+            if "Test Case ID" in missing:
+                missing.remove("Test Case ID")
             if missing:
                 warnings.append(f"Row {i + 1}: missing columns {missing}, written blank")
             ws.append(line)

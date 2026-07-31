@@ -74,19 +74,31 @@ client's real files; `list_input_files()` is the only way there, full stop.
   `output-format` and `resolution-playbook` skills.
 - Test Steps and Expected Result use only the `SET`/`WAIT`/`VERIFY` command
   syntax defined in the `writing-style` skill -- never free-text sentences.
-  Every Test Steps line must have a matching Expected Result line for the
-  same step number (not just `VERIFY` lines) -- QA must reject any row
-  missing one.
+  `SET` always uses `=` (assignment: `SET DoorLockCmd = LOCK`), `VERIFY`
+  always uses `==` (comparison: `VERIFY DoorLockStatus == LOCKED`) -- never
+  a comma, never the word "to"/"is"/"equals" standing in for either; this
+  applies to a `SET` step's Expected Result confirmation line too. Every
+  Test Steps line must have a matching Expected Result line for the same
+  step number (not just `VERIFY` lines) -- QA must reject any row missing
+  one or using the wrong operator.
 - Test Precondition, Test Steps, and Expected Result all use the same fixed
   numbering style: plain `1.`, `2.`, `3.`, ... on separate lines, one single
   sentence (or one atomic command) per line -- never `Step 1`/`Step 2`,
   bullets, or a style that varies row to row. QA must reject any row that
   violates this.
+- Test Case ID is fixed-format `TC_SYS_<n>` (`TC_SYS_1`, `TC_SYS_2`, ...),
+  assigned automatically by `write_output_workbook` in final row order --
+  it overwrites whatever a drafting subagent put there, so this is the one
+  field nobody needs to get right by hand, and it's guaranteed unique
+  across the whole file by construction.
 - Only requirement rows carrying a qualification marker become test cases.
   Default markers (case-insensitive, checked anywhere in the row, not a
   fixed column since this varies by client): {settings.QUALIFICATION_MARKERS}.
   Treat this as a starting point -- the requirement-extraction subagent may
-  find the client uses different but equivalent phrasing; use judgment.
+  find the client uses different but equivalent phrasing; use judgment, and
+  prefer catching a genuine near-miss over silently excluding it. Extraction
+  must account for every row in the requirements sheet, not just the rows
+  that turn out to qualify -- see phase 2 below on tracking full coverage.
 - Every qualifying requirement must be traceable to at least one final test
   case, and must be classified against the fixed check types during
   extraction: {settings.CHECK_TYPES}. A requirement can need more than one
@@ -105,7 +117,16 @@ client's real files; `list_input_files()` is the only way there, full stop.
 2. Delegate to requirement-extraction-agent once per row-chunk of roughly
    {settings.REQUIREMENT_CHUNK_SIZE} rows, looping across the full
    requirements sheet(s) discovery identified, until the whole sheet has
-   been covered.
+   been covered. Discovery.md and each chunk's own `read_sheet_range`
+   response report the sheet's real total row count (`sheet_max_row`) --
+   use it to compute up front how many chunks you actually need, track
+   which ranges are done in your todo list, and confirm the ranges you
+   delegated union to the *entire* sheet with no gaps before moving on.
+   Each subagent call's summary states the range it was asked to cover and
+   the range it actually covered -- if those don't match, that chunk isn't
+   done; re-delegate the missed portion rather than treating it as "no
+   qualifying rows there." A short chunk near the end of the sheet (fewer
+   rows than the usual chunk size) is expected and not a gap.
 3. Delegate to merge-planning-agent once, for the coarse clustering pass.
 4. Delegate to resolution-agent once per cluster (batches of independent
    clusters can be delegated in parallel calls).
