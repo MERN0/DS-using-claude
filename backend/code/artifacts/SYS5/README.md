@@ -23,12 +23,13 @@ If you already know `deepagents` cold, skip straight to
 11. [Skills & memory layering](#skills--memory-layering)
 12. [Configuration reference](#configuration-reference)
 13. [Context management (why long runs don't blow the model's context)](#context-management)
-14. [Output-file write safety](#output-file-write-safety)
-15. [Sandboxing & safety guarantees, summarized](#sandboxing--safety-guarantees-summarized)
-16. [How to run it](#how-to-run-it)
-17. [Extending the system](#extending-the-system)
-18. [Troubleshooting / FAQ](#troubleshooting--faq)
-19. [File-by-file index](#file-by-file-index)
+14. [Run resilience: crashes and premature stops](#run-resilience-crashes-and-premature-stops)
+15. [Output-file write safety](#output-file-write-safety)
+16. [Sandboxing & safety guarantees, summarized](#sandboxing--safety-guarantees-summarized)
+17. [How to run it](#how-to-run-it)
+18. [Extending the system](#extending-the-system)
+19. [Troubleshooting / FAQ](#troubleshooting--faq)
+20. [File-by-file index](#file-by-file-index)
 
 ---
 
@@ -533,6 +534,7 @@ value is overridable via an environment variable.
 | `LLM_BASE_URL` | `SYS5_LLM_BASE_URL` | `http://localhost:8000/v1` | The OpenAI-compatible endpoint URL. |
 | `LLM_TEMPERATURE` | `SYS5_LLM_TEMPERATURE` | `0.1` | Sampling temperature. |
 | `LLM_CONTEXT_TOKENS` | `SYS5_LLM_CONTEXT_TOKENS` | `100000` | The endpoint's **real** total context window — critical to set correctly; see [Context management](#context-management). |
+| `MAX_AUTO_CONTINUE_TURNS` | `SYS5_MAX_AUTO_CONTINUE_TURNS` | `8` | How many times to nudge-and-retry a run that stopped without writing `run_summary.json`, before giving up; see [Run resilience](#run-resilience-crashes-and-premature-stops). |
 | `REQUIREMENT_CHUNK_SIZE` | `SYS5_REQUIREMENT_CHUNK_SIZE` | `40` | Rows per `requirement-extraction-agent` call. |
 | `MAX_REQS_PER_TESTCASE` | `SYS5_MAX_REQS_PER_TESTCASE` | `6` | Hard cap on requirements merged into one test case. |
 | `MAX_RESOLUTION_ATTEMPTS` | `SYS5_MAX_RESOLUTION_ATTEMPTS` | `5` | Bounded search attempts before marking an item `unresolved`. |
@@ -607,6 +609,63 @@ server will actually accept before compaction ever triggers.
 Subagents don't need a separate fix: none of them override `model` in
 their subagent definition, so they all resolve to this same `llm` object
 and inherit its `.profile` automatically.
+
+## Run resilience: crashes and premature stops
+
+A `deepagents`/LangGraph agent's loop works like this: the model responds,
+and if that response includes a tool call, the loop runs the tool and
+feeds the result back in; the loop only stops once a response comes back
+with **no** tool call in it. Two different things can end a run before
+`run_summary.json` actually exists, and `runner.run_pipeline` handles them
+differently:
+
+**1. A hard crash** (an exception raised somewhere in `agent.invoke(...)`)
+— e.g. a bug inside `deepagents` itself: its `FilesystemBackend` raises a
+bare `ValueError("Path traversal not allowed")` for a `..` in a path
+handed to `ls`/`read_file`/etc., but its own error handling only catches
+`OSError`/`RuntimeError` around that call, so it propagates uncaught.
+`run_pipeline` wraps the whole `agent.invoke(...)` call in a broad
+`try/except`: on any exception, the run is reported as a normal generation
+failure (in the returned dict, `final_message` carrying the error) rather
+than crashing whatever process called `sys5()`/the CLI. This is *not*
+retried automatically — re-invoking into whatever just broke is more
+likely to repeat the failure than fix it.
+
+**2. A premature stop with no crash at all** — the model simply replies
+with a conversational status update ("discovery is done, extraction is in
+progress, I'll keep you updated...") instead of continuing to delegate.
+Nothing raises; from LangGraph's point of view the run finished normally.
+This is a real failure mode a smaller/self-hosted model can hit,
+especially after a long subagent call. `run_pipeline` detects it precisely:
+the orchestrator's own prompt defines "done" as "`run_summary.json` exists"
+(step 10 of its checklist), so if `agent.invoke(...)` returns *without*
+that file existing, the run isn't actually finished no matter what the
+last message said.
+
+To recover from case 2, `build_agent` gives the agent an in-memory
+LangGraph checkpointer (`InMemorySaver`), keyed by `thread_id=run_dir.name`
+— this is what makes sending a *second* message on the same thread
+continue the exact same conversation (full history: what discovery found,
+which chunks extraction already processed, everything) instead of starting
+over. `run_pipeline` uses this to automatically send a short "you stopped
+without finishing, continue exactly where you left off" nudge and
+re-invoke, up to `settings.MAX_AUTO_CONTINUE_TURNS` (default `8`, env
+`SYS5_MAX_AUTO_CONTINUE_TURNS`) times, before giving up and reporting the
+run as genuinely incomplete. The orchestrator's prompt also states this
+rule directly ("this run is not done until run_summary.json exists, never
+end a turn with a status update instead of the next action") so relying on
+the nudge is the fallback, not the primary mechanism.
+
+**What this does *not* cover:** the checkpointer is in-memory, so it only
+helps within one `run_pipeline()` call in one running process. If the
+Python process itself is killed (not just the model stopping early), that
+conversation state is gone -- `build_agent` always starts a fresh
+`sys5_agent/runs/<timestamp>/` workspace with no way to resume a
+previous, separate process's run today. That would need a *persistent*
+checkpointer (e.g. writing to a SQLite file inside `run_dir` instead of
+memory) and a way to pass an existing `run_dir` back in to resume against
+-- a bigger, deliberate feature, not something that falls out of the
+in-memory fix above.
 
 ## Output-file write safety
 
@@ -761,6 +820,27 @@ window — see [Context management](#context-management). If it's already
 correct and you're still hitting this on unusually large inputs, consider
 lowering `REQUIREMENT_CHUNK_SIZE`/`MAX_ROWS_PER_READ` so each individual
 subagent call carries less data.
+
+**A run just... stops, with no error, and `final_message` reads like a
+mid-pipeline status update** (e.g. "discovery is done, extraction is in
+progress, I'll keep you updated"). The model ended its turn without a tool
+call before the pipeline was actually done — see
+[Run resilience](#run-resilience-crashes-and-premature-stops). This should
+now be handled automatically (the run auto-continues on the same
+conversation up to `SYS5_MAX_AUTO_CONTINUE_TURNS` times); if you still see
+it after exhausting that budget, it means the model got genuinely stuck,
+not just briefly distracted — check the run's workspace files under
+`result["run_dir"]` for where it actually stalled.
+
+**A tool call crashes with something like "openpyxl does not support
+.jsonl file format" or "Path traversal not allowed."** Both were real
+crash bugs, now fixed: the former was a missing file-type check before
+`load_workbook` (see [The tools](#the-tools)); the latter is a `deepagents`
+internal error that isn't caught inside its own `FilesystemBackend` for a
+`..` in a path — `run_pipeline` now catches *any* exception from the agent
+run and reports it as a normal failure instead of crashing (see
+[Run resilience](#run-resilience-crashes-and-premature-stops)). If you're
+still seeing either, you're likely on an older version of this code.
 
 **A run reports success but the output file is missing/wrong.** As of the
 fixes in [Output-file write safety](#output-file-write-safety), this

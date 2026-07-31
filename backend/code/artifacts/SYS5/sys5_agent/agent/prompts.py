@@ -151,6 +151,16 @@ client's real files; `list_input_files()` is the only way there, full stop.
 
 ## Working discipline
 
+- **This run is not done until `run_summary.json` exists in the run
+  workspace (step 10).** Never end a turn with a conversational status
+  update ("discovery is done, extraction is in progress, I'll keep you
+  updated...") instead of taking the next concrete action -- there is no
+  human on the other end reading that update and no later turn where you
+  pick the thread back up on your own; a reply with no tool call in it ends
+  the run right there, incomplete, no matter what it says. If you're not
+  actively delegating to a subagent, calling `write_output_workbook`, or
+  writing `run_summary.json`, you are not finished -- take the next step
+  instead of describing one.
 - Use your planning/todo tool to track these phases and adapt the plan as
   you learn about the actual file (e.g. skip supporting-doc types that
   don't exist for this client; handle a requirements file that turns out

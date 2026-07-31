@@ -16,6 +16,20 @@ from typing import Any, Optional
 
 from sys5_agent.agent.build import build_agent
 from sys5_agent.agent.progress import ProgressLogger
+from sys5_agent.config import settings
+
+_CONTINUE_NUDGE = (
+    "You stopped without finishing -- run_summary.json does not exist yet in "
+    "the run workspace, which means the pipeline is not actually done "
+    "regardless of what your last message said. Check your todo list and "
+    "the workspace files you've already written (discovery.md, "
+    "requirements_index.jsonl, clusters.jsonl, resolved/*.md, "
+    "draft_testcases.jsonl, qa_report.md if present), then continue exactly "
+    "where you left off through the remaining phases until run_summary.json "
+    "is written. Take the next concrete action (delegate to a subagent, or "
+    "call write_output_workbook / write run_summary.json if everything else "
+    "is already done) -- do not just describe status again."
+)
 
 
 def run_pipeline(
@@ -59,6 +73,19 @@ def run_pipeline(
     stdout as the run progresses -- see `agent/progress.py` -- since
     `agent.invoke(...)` would otherwise be silent for the run's entire
     duration.
+
+    `deepagents`' agent loop ends the moment the orchestrator's latest
+    message has no tool call in it -- normally that only happens once
+    `run_summary.json` has actually been written (the orchestrator's own
+    last step), but nothing stops a model from just stopping early instead
+    (e.g. replying with a chatty status update mid-pipeline). Since
+    `build_agent` gives the returned agent an in-memory checkpointer, this
+    function can tell the difference -- `run_summary.json` existing is the
+    orchestrator's own definition of "done" -- and if it's missing after an
+    otherwise-successful `invoke()`, automatically continues the *same*
+    conversation (full history intact, nothing re-explained) with a short
+    nudge, up to `settings.MAX_AUTO_CONTINUE_TURNS` times, before giving up
+    and reporting the run as genuinely incomplete.
     """
     agent, run_dir = build_agent(client, domain, input_dir, output_path)
 
@@ -79,30 +106,57 @@ def run_pipeline(
 
     print(f"Run workspace: {run_dir}", flush=True)
 
+    invoke_config = {
+        "configurable": {"thread_id": run_dir.name},
+        "recursion_limit": 1000,
+        "callbacks": [ProgressLogger()],
+    }
+    summary_path = run_dir / "run_summary.json"
+
     crash_message: Optional[str] = None
     result: dict[str, Any] = {}
-    try:
-        result = agent.invoke(
-            {"messages": [{"role": "user", "content": task_message}]},
-            config={
-                "configurable": {"thread_id": run_dir.name},
-                "recursion_limit": 1000,
-                "callbacks": [ProgressLogger()],
-            },
-        )
-    except Exception as e:  # noqa: BLE001 -- deliberately broad, see docstring
-        # A run that gets this far has usually already burned real time and
-        # money (many model calls deep into discovery/extraction/resolution)
-        # -- losing that is bad enough without also crashing whatever process
-        # called `run_pipeline` (the backend service, the CLI). Whatever
-        # actually broke (a dependency bug, a provider-side rejection, a
-        # tool escaping in a way nothing here caught) is reported the same
-        # way any other generation failure is: in the returned dict, never
-        # by propagating.
-        crash_message = f"Agent run raised {type(e).__name__}: {e}"
-        print(f"[{run_dir.name}] !!! run crashed: {crash_message}", flush=True)
+    next_message = task_message
+    attempt = 0
+    while True:
+        try:
+            result = agent.invoke({"messages": [{"role": "user", "content": next_message}]}, config=invoke_config)
+        except Exception as e:  # noqa: BLE001 -- deliberately broad, see docstring
+            # A run that gets this far has usually already burned real time
+            # and money (many model calls deep into discovery/extraction/
+            # resolution) -- losing that is bad enough without also crashing
+            # whatever process called `run_pipeline` (the backend service,
+            # the CLI). Whatever actually broke (a dependency bug, a
+            # provider-side rejection, a tool escaping in a way nothing here
+            # caught) is reported the same way any other generation failure
+            # is: in the returned dict, never by propagating. Unlike an
+            # incomplete-but-not-crashed run below, a crash is not
+            # auto-retried here -- that's a different failure mode, and
+            # blindly re-invoking into whatever just broke is more likely to
+            # repeat it than fix it.
+            crash_message = f"Agent run raised {type(e).__name__}: {e}"
+            print(f"[{run_dir.name}] !!! run crashed: {crash_message}", flush=True)
+            break
 
-    summary_path = run_dir / "run_summary.json"
+        if summary_path.is_file():
+            break
+
+        attempt += 1
+        if attempt > settings.MAX_AUTO_CONTINUE_TURNS:
+            print(
+                f"[{run_dir.name}] !!! giving up after {attempt - 1} auto-continue "
+                "attempt(s) -- run_summary.json was never written.",
+                flush=True,
+            )
+            break
+
+        print(
+            f"[{run_dir.name}] ... orchestrator stopped before finishing (no "
+            f"run_summary.json yet) -- auto-continuing "
+            f"(attempt {attempt}/{settings.MAX_AUTO_CONTINUE_TURNS})",
+            flush=True,
+        )
+        next_message = _CONTINUE_NUDGE
+
     summary: Optional[dict] = None
     if summary_path.is_file():
         summary = json.loads(summary_path.read_text(encoding="utf-8"))
