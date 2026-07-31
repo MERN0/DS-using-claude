@@ -80,9 +80,20 @@ LLM_API_KEY = os.environ.get("SYS5_LLM_API_KEY", "not-needed")
 LLM_BASE_URL = os.environ.get("SYS5_LLM_BASE_URL", "http://localhost:8000/v1")
 LLM_TEMPERATURE = float(os.environ.get("SYS5_LLM_TEMPERATURE", "0.1"))
 
-# Total context window advertised by the hosted model. Used only to size
-# chunking/budget heuristics below -- never assume more than this is safe.
-LLM_CONTEXT_TOKENS = int(os.environ.get("SYS5_LLM_CONTEXT_TOKENS", "130000"))
+# Real total context window the endpoint in LLM_BASE_URL enforces. This is
+# reported to the model as its `profile["max_input_tokens"]` (see
+# agent/build.py) so deepagents' auto-attached SummarizationMiddleware
+# compacts the conversation at 85% of it -- a self-hosted, OpenAI-compatible
+# model name like the LLM_MODEL default has no entry in langchain_openai's
+# built-in profile registry, so without this value the middleware falls
+# back to a fixed 170k-token trigger regardless of what the endpoint
+# actually enforces, which is exactly how a long run (many requirements,
+# many clusters) used to end in a hard "exceeds maximum context length"
+# rejection from the server instead of ever compacting. Set this to
+# whatever LLM_BASE_URL's model card/server config actually advertises --
+# UNDER-reporting it here just triggers compaction earlier than strictly
+# necessary (cheap); OVER-reporting it reintroduces this same failure.
+LLM_CONTEXT_TOKENS = int(os.environ.get("SYS5_LLM_CONTEXT_TOKENS", "100000"))
 
 # ---------------------------------------------------------------------------
 # Chunking / merge / retry knobs

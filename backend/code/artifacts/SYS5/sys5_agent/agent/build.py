@@ -133,6 +133,21 @@ def build_agent(client: str, domain: str, input_dir: Path, output_path: Path):
         openai_api_key=settings.LLM_API_KEY,
         openai_api_base=settings.LLM_BASE_URL,
         temperature=settings.LLM_TEMPERATURE,
+        # `create_deep_agent` auto-attaches a SummarizationMiddleware sized
+        # off `model.profile["max_input_tokens"]` when it's present, and
+        # otherwise falls back to a fixed 170k-token trigger regardless of
+        # this model's real window -- see
+        # deepagents.middleware.summarization.compute_summarization_defaults.
+        # A self-hosted, OpenAI-compatible model name like this one has no
+        # entry in langchain_openai's built-in profile registry, so without
+        # this the orchestrator's own conversation was free to grow past
+        # whatever the real endpoint actually enforces (e.g. a server capped
+        # at 100k tokens rejecting a 117k-token request) long before that
+        # 170k fallback would ever have compacted it. Supplying the real
+        # window here is what makes compaction actually kick in at 85% of
+        # it, per settings.LLM_CONTEXT_TOKENS -- keep that value in sync with
+        # whatever the endpoint in LLM_BASE_URL actually enforces.
+        profile={"max_input_tokens": settings.LLM_CONTEXT_TOKENS},
     )
 
     # virtual_mode=True sandboxes the agent's built-in filesystem tools

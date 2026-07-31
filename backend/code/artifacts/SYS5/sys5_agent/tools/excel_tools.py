@@ -39,7 +39,9 @@ every other tool here needs, verbatim.
 from __future__ import annotations
 
 import json
+import os
 import re
+import uuid
 from pathlib import Path
 from typing import Any, Optional
 
@@ -512,9 +514,14 @@ def build_write_tool(output_path: Path):
                 names).
 
         Returns:
-            JSON {"output_path": str, "row_count": int, "warnings": [str, ...]}.
-            `warnings` lists any row missing an expected column (written as
-            blank) so the caller can decide whether that's acceptable.
+            On success: JSON {"output_path": str, "row_count": int,
+            "warnings": [str, ...]}. `warnings` lists any row missing an
+            expected column (written as blank) so the caller can decide
+            whether that's acceptable.
+            On failure: JSON {"error": str} -- the destination is left
+            exactly as it was before this call (nothing partial or corrupt
+            is ever written to it); report this as a real failure, never as
+            success, and consider calling this tool again.
         """
         out.parent.mkdir(parents=True, exist_ok=True)
 
@@ -541,7 +548,37 @@ def build_write_tool(output_path: Path):
 
         _beautify_workbook(ws, settings.OUTPUT_COLUMNS, len(rows))
 
-        wb.save(out)
+        # Save to a temp file in the same directory (so the final move below
+        # is an atomic same-filesystem rename, never a partial copy), verify
+        # it actually reopens as the workbook we just wrote, then swap it
+        # into place. Writing `wb.save(out)` directly used to mean any
+        # mid-save failure -- a locked/synced destination file (e.g. a
+        # OneDrive-synced output folder on Windows), a disk hiccup, the file
+        # still open in Excel -- could leave a truncated or empty file
+        # sitting at `out`. That file still satisfies a plain `is_file()`
+        # check, so the run got reported as successful while the "saved"
+        # workbook was actually corrupt or missing its rows. Nothing below
+        # ever touches `out` itself until the write is confirmed good.
+        # Extension must stay `out`'s own (.xlsx) -- openpyxl's save/load
+        # refuse an unrecognized suffix like a plain ".tmp".
+        tmp_path = out.parent / f".{out.stem}.{uuid.uuid4().hex}{out.suffix}"
+        try:
+            wb.save(tmp_path)
+            verify_wb = load_workbook(tmp_path, read_only=True)
+            try:
+                verify_ws = verify_wb[settings.OUTPUT_SHEET_NAME]
+                if verify_ws.max_row != len(rows) + 1:
+                    raise ValueError(
+                        f"Saved workbook has {verify_ws.max_row} row(s), expected "
+                        f"{len(rows) + 1} (header + {len(rows)} data rows)"
+                    )
+            finally:
+                verify_wb.close()
+            os.replace(tmp_path, out)
+        except Exception as e:
+            tmp_path.unlink(missing_ok=True)
+            return _dump({"error": f"Failed to save output workbook to {out}: {e}"})
+
         return _dump({"output_path": str(out), "row_count": len(rows), "warnings": warnings})
 
     return write_output_workbook
