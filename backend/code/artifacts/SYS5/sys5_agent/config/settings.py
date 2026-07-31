@@ -95,6 +95,18 @@ LLM_TEMPERATURE = float(os.environ.get("SYS5_LLM_TEMPERATURE", "0.1"))
 # necessary (cheap); OVER-reporting it reintroduces this same failure.
 LLM_CONTEXT_TOKENS = int(os.environ.get("SYS5_LLM_CONTEXT_TOKENS", "100000"))
 
+# The orchestrator's own agent loop ends the instant its latest message has
+# no tool call in it -- which normally only happens once run_summary.json
+# has actually been written, but a model can also just stop early (e.g.
+# emit a chatty "here's my status so far" reply instead of continuing to
+# delegate) with nothing forcing it to keep going. `run_pipeline` treats
+# "no run_summary.json yet" as "not actually done" and re-invokes the same
+# thread (see agent/build.py's checkpointer) with a short nudge to continue,
+# up to this many times, before giving up and reporting the run as
+# genuinely incomplete rather than looping forever against a model that's
+# stuck.
+MAX_AUTO_CONTINUE_TURNS = int(os.environ.get("SYS5_MAX_AUTO_CONTINUE_TURNS", "8"))
+
 # ---------------------------------------------------------------------------
 # Chunking / merge / retry knobs
 # ---------------------------------------------------------------------------

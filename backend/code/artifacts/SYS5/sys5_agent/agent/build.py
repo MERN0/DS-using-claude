@@ -27,6 +27,7 @@ from pathlib import Path
 from deepagents import create_deep_agent
 from deepagents.backends.filesystem import FilesystemBackend
 from langchain_openai import ChatOpenAI
+from langgraph.checkpoint.memory import InMemorySaver
 
 from sys5_agent.agent.prompts import ORCHESTRATOR_SYSTEM_PROMPT
 from sys5_agent.agent.subagents import build_subagents
@@ -116,6 +117,16 @@ def build_agent(client: str, domain: str, input_dir: Path, output_path: Path):
     `output_path` -- never anywhere else on disk. This is on top of (not a
     replacement for) the run workspace's own `virtual_mode` sandbox below.
 
+    The returned agent is built with an in-memory checkpointer, so calling
+    `.invoke(..., config={"configurable": {"thread_id": run_dir.name}})`
+    more than once against it continues the same conversation (full message
+    history, todos, everything) instead of starting over -- this is what
+    lets `runner.run_pipeline` nudge the orchestrator to keep going if it
+    ever stops before the pipeline is actually finished (see there). It's
+    in-memory only: it survives repeated calls within this same process,
+    not a process restart -- there is currently no way to resume a run
+    whose Python process was itself killed.
+
     Returns (agent, run_dir).
     """
     domain = settings.normalize_domain(domain)
@@ -165,6 +176,7 @@ def build_agent(client: str, domain: str, input_dir: Path, output_path: Path):
         skills=["skills/"],
         subagents=build_subagents(input_dir),
         debug=settings.DEBUG,
+        checkpointer=InMemorySaver(),
     )
 
     return agent, run_dir
