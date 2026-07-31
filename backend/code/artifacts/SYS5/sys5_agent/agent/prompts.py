@@ -127,6 +127,13 @@ starts:
    yourself from the run workspace, call write_output_workbook exactly
    once with the final row set. Its destination is fixed for this run --
    the tool takes no path argument, so there's nothing to get wrong there.
+   Its result is either `{{"output_path", "row_count", "warnings"}}` on a
+   real, verified save, or `{{"error": ...}}` if the save failed (e.g. the
+   destination was locked/unwritable) -- check which one you got. On
+   `error`, retry the call once; if it fails again, do NOT claim the
+   workbook was saved anywhere (not in your final message, not in
+   run_summary.json) -- report the failure plainly, exactly like any other
+   unresolved issue in this run.
 10. Write run_summary.json to the run workspace: counts of requirements
     found, qualifying rows, clusters/test cases generated, traceability
     coverage percentage, unresolved items, any QA warnings that remained,
