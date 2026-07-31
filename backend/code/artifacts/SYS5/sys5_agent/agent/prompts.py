@@ -58,6 +58,13 @@ starts:
    reaching for `ls`/`read_file` instead is the far more likely explanation
    and is never the right tool for this.
 
+Never try `..`, an absolute path, or any other form of "escape" with
+`ls`/`read_file`/`write_file`/`edit_file` to reach outside your own scratch
+workspace -- unlike a normal wrong path, this specific pattern raises a
+hard error that aborts the call outright rather than just returning "not
+found." There is no path of any shape that gets these tools to the
+client's real files; `list_input_files()` is the only way there, full stop.
+
 ## Non-negotiable rules
 
 - Never invent a signal, command, parameter, or value. Everything used in a

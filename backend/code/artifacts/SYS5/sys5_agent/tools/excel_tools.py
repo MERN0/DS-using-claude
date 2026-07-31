@@ -194,6 +194,48 @@ def _access_denied(file_name: str, root: Path) -> str:
     )
 
 
+_SUPPORTED_READ_SUFFIXES = (".xlsx", ".xlsm")
+
+
+def _open_workbook(p: Path) -> tuple[Optional[Workbook], Optional[str]]:
+    """Open `p` read-only, or return `(None, <error JSON>)` instead of
+    letting `openpyxl` raise straight out of a `@tool` function.
+
+    Every read-only tool below is bound to the real input directory, but a
+    model can still hand back a `file_name` that isn't one of the
+    `.xlsx`/`.xlsm` files `list_input_files()` actually listed -- a
+    run-workspace file it confused for a real one (e.g.
+    `requirements_index.jsonl`), some other non-workbook file that happens
+    to sit in the input directory, a typo'd name. `load_workbook` reacts to
+    those with `FileNotFoundError` or `InvalidFileException` respectively,
+    and until this check existed only `list_workbook_sheets` guarded
+    against it -- `preview_sheet`, `read_sheet_range`, and `search_sheet`
+    called `load_workbook` unguarded, so any of those inputs crashed the
+    whole tool call (and the subagent turn with it) instead of giving the
+    model a normal, actionable error to react to.
+    """
+    if not p.is_file():
+        return None, _dump(
+            {"error": f"Not a file: '{p.name}'. Call list_input_files() to see what's actually available."}
+        )
+    if p.suffix.lower() not in _SUPPORTED_READ_SUFFIXES:
+        return None, _dump(
+            {
+                "error": (
+                    f"'{p.name}' is not a supported workbook -- only "
+                    f"{_SUPPORTED_READ_SUFFIXES} can be read. list_input_files() "
+                    "only ever lists files this tool can actually open; if "
+                    "this name didn't come from there, it isn't a real input "
+                    "file."
+                )
+            }
+        )
+    try:
+        return load_workbook(p, read_only=True, data_only=True), None
+    except Exception as e:  # noqa: BLE001 -- any open failure becomes a normal tool error, never a crash
+        return None, _dump({"error": f"Could not open '{p.name}': {e}"})
+
+
 # ---------------------------------------------------------------------------
 # Read-only tools (bound to one run's input directory)
 # ---------------------------------------------------------------------------
@@ -227,7 +269,7 @@ def build_read_only_tools(input_root: Path) -> list:
         Returns:
             JSON list of {"file_name": str, "size_bytes": int}.
         """
-        files = sorted(p for p in root.iterdir() if p.is_file() and p.suffix.lower() in (".xlsx", ".xlsm"))
+        files = sorted(p for p in root.iterdir() if p.is_file() and p.suffix.lower() in _SUPPORTED_READ_SUFFIXES)
         return _dump([{"file_name": p.name, "size_bytes": p.stat().st_size} for p in files])
 
     @tool
@@ -250,9 +292,9 @@ def build_read_only_tools(input_root: Path) -> list:
         p = _resolve_within(root, file_name)
         if p is None:
             return _access_denied(file_name, root)
-        if not p.is_file():
-            return _dump({"error": f"Not a file: {p}"})
-        wb = load_workbook(p, read_only=True, data_only=True)
+        wb, error = _open_workbook(p)
+        if error:
+            return error
         try:
             out = []
             for name in wb.sheetnames:
@@ -289,7 +331,9 @@ def build_read_only_tools(input_root: Path) -> list:
         if p is None:
             return _access_denied(file_name, root)
         n = n_rows or settings.SHEET_PREVIEW_ROWS
-        wb = load_workbook(p, read_only=True, data_only=True)
+        wb, error = _open_workbook(p)
+        if error:
+            return error
         try:
             if sheet_name not in wb.sheetnames:
                 return _dump({"error": f"Sheet '{sheet_name}' not found. Available: {wb.sheetnames}"})
@@ -341,7 +385,9 @@ def build_read_only_tools(input_root: Path) -> list:
         p = _resolve_within(root, file_name)
         if p is None:
             return _access_denied(file_name, root)
-        wb = load_workbook(p, read_only=True, data_only=True)
+        wb, error = _open_workbook(p)
+        if error:
+            return error
         try:
             if sheet_name not in wb.sheetnames:
                 return _dump({"error": f"Sheet '{sheet_name}' not found. Available: {wb.sheetnames}"})
@@ -422,7 +468,9 @@ def build_read_only_tools(input_root: Path) -> list:
         if p is None:
             return _access_denied(file_name, root)
         limit = max_results or settings.MAX_SEARCH_RESULTS
-        wb = load_workbook(p, read_only=True, data_only=True)
+        wb, error = _open_workbook(p)
+        if error:
+            return error
         try:
             if sheet_name not in wb.sheetnames:
                 return _dump({"error": f"Sheet '{sheet_name}' not found. Available: {wb.sheetnames}"})
