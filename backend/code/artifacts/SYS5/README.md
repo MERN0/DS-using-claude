@@ -80,13 +80,19 @@ every later section assumes you know what these mean.
 backend/code/artifacts/SYS5/
 ├── README.md                    <- this file
 ├── sys5.py                      <- backend entry point: def sys5(...)
+├── ui/                          <- chat UI for authoring client customizations
+│   ├── app.py                    <- FastAPI app (2 routes + static/templates)
+│   ├── state.py                  <- the chat's step-by-step conversation logic
+│   ├── builders.py                <- the only code that writes clients/<name>/ files
+│   └── README.md                  <- what it does, how to run it
 └── sys5_agent/                  <- the agent package itself
     ├── main.py                  <- CLI entry point (argparse wrapper)
     ├── requirements.txt
     ├── agent/
     │   ├── build.py              <- builds one run's agent + workspace
     │   ├── prompts.py            <- orchestrator's system prompt
-    │   ├── subagents.py          <- the 6 subagent definitions
+    │   ├── subagents.py          <- the 6 fixed subagent definitions
+    │   ├── custom_subagents.py   <- loads a client's *additional* subagents
     │   └── runner.py             <- shared "run one cycle" logic
     ├── tools/
     │   └── excel_tools.py        <- every tool that touches real .xlsx files
@@ -99,7 +105,9 @@ backend/code/artifacts/SYS5/
     │                                resolution-playbook, output-format
     │   └── <client-name>/        <- (created per-client, as needed) overrides
     │       ├── memory/AGENTS.md  <- appended on top of the baseline
-    │       └── skills/           <- overrides same-named baseline skills
+    │       ├── skills/           <- overrides same-named baseline skills
+    │       └── subagents/        <- *additional* subagents for this client
+    │                                (see agent/custom_subagents.py)
     ├── domains/
     │   └── <domain>/skills/domain-knowledge/SKILL.md
     │                              <- one per automotive domain: bcm, ivi, ev,
@@ -109,6 +117,14 @@ backend/code/artifacts/SYS5/
     └── output/                  <- CLI's default output location (the
                                      backend always supplies its own instead)
 ```
+
+**Authoring client customizations without hand-writing files:** `ui/` is a
+small FastAPI chat app that walks you through creating/editing/deleting a
+client's memory rules, skill overrides, and custom subagents, explaining
+each concept as it comes up and validating everything against exactly what
+the pipeline expects before saving. See [`ui/README.md`](ui/README.md).
+It only authors files under `clients/<name>/` — running an actual
+generation is still done the normal way (below).
 
 ## The big picture
 
@@ -339,6 +355,11 @@ subagent's own instructions once invoked. Every subagent's prompt ends
 with the same instruction (`_RETURN_SUMMARY_ONLY`): persist detail to a
 workspace file, return only a short summary — this is what keeps the
 orchestrator's own context small no matter how large the input file is.
+
+These six always run, in every client's pipeline, unmodified. A client can
+additionally register its own extra subagents alongside them (see
+`agent/custom_subagents.py` and [Extending the system](#extending-the-system))
+— always purely additive, never a substitute for any of the six below.
 
 | Subagent | Called | Reads (from real input dir) | Writes (to run workspace) | Skills loaded |
 |---|---|---|---|---|
@@ -593,7 +614,7 @@ value is overridable via an environment variable.
 `DOMAINS`, `DOMAIN_LABELS`, `DOMAIN_ALIASES`, `CLIENTS_DIR`, `RUNS_DIR`,
 `OUTPUT_DIR` and the `client_dir()`/`domain_dir()`/`normalize_domain()`
 helper functions are also defined here — see the file directly for their
-exact behavior, including the path-traversal guard (`_validate_safe_name`)
+exact behavior, including the path-traversal guard (`validate_safe_name`)
 that rejects a `project_name`/`domain` containing `/` or `..` before it
 ever reaches a `Path` join.
 
@@ -780,7 +801,7 @@ was saved.
   a *completely different filesystem* from the real input/output dirs (see
   [The two filesystems](#the-two-filesystems)).
 - **`project_name`/`domain` are validated against a safe-name pattern**
-  (`_validate_safe_name` in `settings.py`) before ever being joined onto
+  (`validate_safe_name` in `settings.py`) before ever being joined onto
   `CLIENTS_DIR`/`DOMAINS_DIR`, rejecting anything containing a path
   separator or `..`.
 - **A failed output save can never corrupt or fake a prior result** — see
@@ -838,7 +859,22 @@ run that passes `--domain <name>`.
 `memory/AGENTS.md` there is appended after the baseline rules; a
 `skills/<name>/SKILL.md` there overrides the same-named baseline (or
 domain) skill for that client only. A project with no such directory yet
-still runs fine on baseline rules alone — this is purely additive.
+still runs fine on baseline rules alone — this is purely additive. The
+[chat UI](ui/README.md) does exactly this through a guided conversation
+instead of hand-editing files, and also supports **editing/deleting** an
+existing override, not just creating new ones.
+
+**Add a client-specific subagent:** create
+`clients/<name>/subagents/<subagent-name>.md` — same frontmatter+body
+convention as a `SKILL.md` file (`name`, `description`, `tools: [...]`,
+`skills: [...]` in the frontmatter, the system prompt as the body). Loaded
+by `agent/custom_subagents.load_custom_subagents` and appended to the
+fixed six every run already has — always additive, never a replacement for
+the six-phase pipeline. An unknown tool/skill name, or a file that fails
+to parse at all, is dropped with a printed warning rather than failing the
+run (see that module's docstring for the exact format and every failure
+mode it tolerates). The [chat UI](ui/README.md) is the easiest way to
+author one correctly.
 
 **Add a new tool:** follow the existing pattern in `tools/excel_tools.py`
 — a factory function that closes over whatever real path/resource it

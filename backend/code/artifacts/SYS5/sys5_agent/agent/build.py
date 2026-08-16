@@ -16,6 +16,12 @@ the previous one: baseline (`clients/_default/skills/`) -> domain
 (`domains/<domain>/skills/`, e.g. the `domain-knowledge` skill) -> client
 (`clients/<name>/skills/`). The domain is fixed for the whole run (passed
 once via `--domain`), unlike per-cluster/per-chunk work.
+
+A client can also register additional, purely-additive subagents alongside
+the fixed six the pipeline always runs -- see
+`agent/custom_subagents.load_custom_subagents` for the file format
+(`clients/<name>/subagents/*.md`) and `backend/code/artifacts/SYS5/ui/` for
+the chat UI that authors them.
 """
 
 from __future__ import annotations
@@ -29,6 +35,7 @@ from deepagents.backends.filesystem import FilesystemBackend
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import InMemorySaver
 
+from sys5_agent.agent.custom_subagents import load_custom_subagents
 from sys5_agent.agent.prompts import ORCHESTRATOR_SYSTEM_PROMPT
 from sys5_agent.agent.subagents import build_subagents
 from sys5_agent.config import settings
@@ -138,6 +145,10 @@ def build_agent(client: str, domain: str, input_dir: Path, output_path: Path):
     run_dir = _new_run_dir()
     _write_layered_memory(run_dir, client, domain)
     _copy_layered_skills(run_dir, client, domain)
+    # Must come after _copy_layered_skills: it validates each custom
+    # subagent's requested skill names against what's actually present
+    # under run_dir/skills/ for this run.
+    custom_subagents = load_custom_subagents(client, input_dir, run_dir)
 
     llm = ChatOpenAI(
         model=settings.LLM_MODEL,
@@ -174,7 +185,7 @@ def build_agent(client: str, domain: str, input_dir: Path, output_path: Path):
         backend=backend,
         memory=["memory/AGENTS.md"],
         skills=["skills/"],
-        subagents=build_subagents(input_dir),
+        subagents=build_subagents(input_dir) + custom_subagents,
         debug=settings.DEBUG,
         checkpointer=InMemorySaver(),
     )
