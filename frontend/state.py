@@ -3,8 +3,9 @@ The chat state machine: one step name -> one handler function, each taking
 the current session dict and the user's latest input and returning
 (updated session dict, bot turn dict).
 
-`app.py` owns the actual Flask session storage; this module is pure logic
-so it's testable without a running server (see `test_state.py`).
+`app.py` owns the actual session storage (a Starlette `SessionMiddleware`
+signed cookie); this module is pure logic so it's testable without a
+running server (see `test_state.py`).
 
 A "bot turn" is a plain JSON-able dict:
     {

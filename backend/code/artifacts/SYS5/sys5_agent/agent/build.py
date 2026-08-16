@@ -20,8 +20,8 @@ once via `--domain`), unlike per-cluster/per-chunk work.
 A client can also register additional, purely-additive subagents alongside
 the fixed six the pipeline always runs -- see
 `agent/custom_subagents.load_custom_subagents` for the file format
-(`clients/<name>/subagents/*.md`) and `backend/code/artifacts/SYS5/ui/` for
-the chat UI that authors them.
+(`clients/<name>/subagents/*.md`) and `frontend/` (repo root) for the chat
+UI that authors them.
 """
 
 from __future__ import annotations

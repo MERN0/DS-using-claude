@@ -25,9 +25,9 @@ error here is logged (printed, so it shows up the same way
 `agent/progress.py`'s live logging does) and that one file is skipped
 rather than raised.
 
-The ui/ Flask app (see backend/code/artifacts/SYS5/ui/) is what actually
-writes these files today, but the format is deliberately hand-editable
-too -- nothing here depends on how a file was created.
+The chat UI at `frontend/` (repo root, a sibling of `backend/`) is what
+actually writes these files today, but the format is deliberately
+hand-editable too -- nothing here depends on how a file was created.
 """
 
 from __future__ import annotations
@@ -65,9 +65,9 @@ _CONTRACT_REMINDER = (
 )
 
 # Public: this is the single definition of the file format (frontmatter
-# block + body) -- backend/code/artifacts/SYS5/ui/builders.py reuses it
-# directly so authoring/editing through the UI can never drift from what
-# this loader actually accepts.
+# block + body) -- frontend/builders.py reuses it directly so authoring/
+# editing through the UI can never drift from what this loader actually
+# accepts.
 FRONTMATTER_RE = re.compile(r"\A---\s*\n(.*?)\n---\s*\n?(.*)\Z", re.DOTALL)
 
 

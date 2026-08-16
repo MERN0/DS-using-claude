@@ -1,12 +1,15 @@
 # SYS5 Client Setup — chat UI
 
-A small, self-contained Flask app for authoring a client's customizations
+A small, self-contained FastAPI app for authoring a client's customizations
 to the SYS2→SYS5 pipeline through a guided, chatbot-style conversation,
 instead of hand-writing Markdown/YAML files under `clients/<name>/`.
 
-See the main [architecture guide](../README.md) first if you haven't —
-this UI is just an authoring front end for concepts explained there
-(clients, skills, memory, subagents).
+This directory (`frontend/`) lives at the repo root, alongside `backend/`
+— the pipeline it configures is under
+[`backend/code/artifacts/SYS5/`](../backend/code/artifacts/SYS5/). See the
+main [architecture guide](../backend/code/artifacts/SYS5/README.md) first
+if you haven't — this UI is just an authoring front end for concepts
+explained there (clients, skills, memory, subagents).
 
 ## What it does
 
@@ -35,11 +38,11 @@ saving.
 This UI only authors files — it never calls `sys5()` or runs a real
 generation. Testing a client's new configuration is still done the normal
 way (the CLI or the backend's `sys5()` call, see the main README's
-[How to run it](../README.md#how-to-run-it)). Keeping "author the
-configuration" and "run a generation" as two separate, unconnected tools
-is a deliberate scope boundary, not a missing feature — a real run can
-take many minutes and needs LLM connectivity this UI has no reason to
-depend on.
+[How to run it](../backend/code/artifacts/SYS5/README.md#how-to-run-it)).
+Keeping "author the configuration" and "run a generation" as two separate,
+unconnected tools is a deliberate scope boundary, not a missing feature —
+a real run can take many minutes and needs LLM connectivity this UI has no
+reason to depend on.
 
 ## Running it
 
@@ -64,12 +67,14 @@ dev-server entry point.
   signed-cookie conversation session. Holds no business logic.
 - `state.py` — the conversation as a step-name → handler-function state
   machine (see its own module docstring for the exact "bot turn" shape).
-  Pure logic, no Flask dependency, so it's testable on its own.
+  Pure logic, no web-framework dependency at all, so it's testable on its
+  own.
 - `builders.py` — the only module that actually reads/writes files under
-  `clients/<name>/`. Every format guarantee lives here in one place,
-  reusing the pipeline's own validation (`settings.validate_safe_name`,
-  the real tool list from `tools/excel_tools.py`) rather than duplicating
-  it.
+  `clients/<name>/`. Adds the SYS5 package to `sys.path` itself (it lives
+  outside `backend/`, so this isn't automatic) and then reuses the
+  pipeline's own validation directly — `sys5_agent.config.settings.
+  validate_safe_name`, the real tool list from `sys5_agent.tools.
+  excel_tools` — rather than duplicating any of it.
 - `templates/index.html` + `static/chat.js` + `static/style.css` —
   Bootstrap 5 (via CDN) for styling, vanilla JS for the chat interaction.
   The JS has zero knowledge of the conversation's shape — it renders

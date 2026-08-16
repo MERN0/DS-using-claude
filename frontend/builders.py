@@ -2,14 +2,14 @@
 All read/write/validate logic for a client's customizations: memory rules,
 skill overrides, and custom subagents. This is the ONLY module that touches
 the real `clients/<name>/` directory tree on behalf of the UI -- `app.py`'s
-Flask routes call these functions, never write files directly, so every
+FastAPI routes call these functions, never write files directly, so every
 format guarantee the pipeline itself relies on (see
 `sys5_agent/agent/build.py` and `sys5_agent/agent/custom_subagents.py`) is
 enforced in exactly one place.
 
 Nothing here talks to an LLM or runs a generation -- this UI only authors
-the files a future `sys5()`/CLI run will pick up (see
-`backend/code/artifacts/SYS5/ui/README.md`).
+the files a future `sys5()`/CLI run will pick up (see `README.md` in this
+directory).
 """
 
 from __future__ import annotations
@@ -19,8 +19,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-_UI_DIR = Path(__file__).resolve().parent
-_SYS5_DIR = _UI_DIR.parent
+# This file lives in frontend/ at the repo root, a sibling of backend/ --
+# not nested under the SYS5 package -- so the path to sys5_agent has to be
+# spelled out rather than assumed to be this file's own parent directory.
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+_SYS5_DIR = _REPO_ROOT / "backend" / "code" / "artifacts" / "SYS5"
 if str(_SYS5_DIR) not in sys.path:
     sys.path.insert(0, str(_SYS5_DIR))
 

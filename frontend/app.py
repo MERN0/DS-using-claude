@@ -18,8 +18,12 @@ import os
 import sys
 from pathlib import Path
 
-_UI_DIR = Path(__file__).resolve().parent
-_SYS5_DIR = _UI_DIR.parent
+_FRONTEND_DIR = Path(__file__).resolve().parent
+# This file lives in frontend/ at the repo root, a sibling of backend/ --
+# not nested under the SYS5 package -- so the path to sys5_agent has to be
+# spelled out rather than assumed to be this file's own parent directory.
+_REPO_ROOT = _FRONTEND_DIR.parent
+_SYS5_DIR = _REPO_ROOT / "backend" / "code" / "artifacts" / "SYS5"
 if str(_SYS5_DIR) not in sys.path:
     sys.path.insert(0, str(_SYS5_DIR))
 
@@ -37,8 +41,8 @@ app = FastAPI(title="SYS5 Client Setup")
 # sensitive, and losing it just means starting the chat over. Set
 # SYS5_UI_SECRET_KEY to something real for anything beyond local use.
 app.add_middleware(SessionMiddleware, secret_key=os.environ.get("SYS5_UI_SECRET_KEY", os.urandom(24).hex()))
-app.mount("/static", StaticFiles(directory=str(_UI_DIR / "static")), name="static")
-templates = Jinja2Templates(directory=str(_UI_DIR / "templates"))
+app.mount("/static", StaticFiles(directory=str(_FRONTEND_DIR / "static")), name="static")
+templates = Jinja2Templates(directory=str(_FRONTEND_DIR / "templates"))
 
 
 @app.get("/", response_class=HTMLResponse)
