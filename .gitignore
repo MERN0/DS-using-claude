@@ -229,5 +229,11 @@ backend/code/artifacts/SYS5/sys5_agent/runs/*
 backend/code/artifacts/SYS5/sys5_agent/output/*
 !backend/code/artifacts/SYS5/sys5_agent/output/.gitkeep
 
+# frontend/ dashboard's own upload/output scratch space (not source)
+frontend/uploads/*
+!frontend/uploads/.gitkeep
+frontend/outputs/*
+!frontend/outputs/.gitkeep
+
 # Archive/backup blobs
 *.zip

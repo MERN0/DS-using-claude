@@ -32,7 +32,7 @@ OUTPUT_DIR = REPO_ROOT / "output"
 _SAFE_NAME_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]*$")
 
 
-def _validate_safe_name(name: str, label: str) -> str:
+def validate_safe_name(name: str, label: str) -> str:
     name = str(name).strip()
     if not name or not _SAFE_NAME_RE.match(name) or ".." in name:
         raise ValueError(
@@ -229,8 +229,8 @@ def client_dir(client: str) -> Path:
     """Resolve a client/project name to its clients/<name> directory, falling
     back to the client's own dir even if it doesn't exist yet (caller decides
     how to handle a missing client). Raises ValueError if `client` isn't a
-    safe path segment (see _validate_safe_name)."""
-    return CLIENTS_DIR / _validate_safe_name(client, "client/project name")
+    safe path segment (see validate_safe_name)."""
+    return CLIENTS_DIR / validate_safe_name(client, "client/project name")
 
 
 def default_client_dir() -> Path:
@@ -248,8 +248,8 @@ def domain_dir(domain: str) -> Path:
     """Resolve a domain name to its domains/<name> directory, falling back
     to the domain's own dir even if it doesn't exist yet (caller decides how
     to handle an unknown domain). Raises ValueError if `domain` isn't a safe
-    path segment (see _validate_safe_name) -- this does NOT check `domain`
+    path segment (see validate_safe_name) -- this does NOT check `domain`
     is one of the recognized DOMAINS; callers should validate that
     separately (e.g. `normalize_domain(domain) in DOMAINS`) when they need a
     hard "unsupported domain" error rather than just a missing directory."""
-    return DOMAINS_DIR / _validate_safe_name(normalize_domain(domain), "domain")
+    return DOMAINS_DIR / validate_safe_name(normalize_domain(domain), "domain")

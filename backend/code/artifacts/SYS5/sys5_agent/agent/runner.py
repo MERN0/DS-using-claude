@@ -14,6 +14,7 @@ import json
 from pathlib import Path
 from typing import Any, Optional
 
+from sys5_agent.agent import logsink
 from sys5_agent.agent.build import build_agent
 from sys5_agent.agent.progress import ProgressLogger
 from sys5_agent.config import settings
@@ -72,7 +73,10 @@ def run_pipeline(
     Prints one line per tool call (including every subagent's own calls) to
     stdout as the run progresses -- see `agent/progress.py` -- since
     `agent.invoke(...)` would otherwise be silent for the run's entire
-    duration.
+    duration. Every one of those lines (and this function's own) goes
+    through `agent/logsink.py`, so a caller that registered a sink there
+    before calling this (e.g. `frontend/app.py`, for a live-progress UI)
+    receives them too, without affecting the CLI's plain stdout output.
 
     `deepagents`' agent loop ends the moment the orchestrator's latest
     message has no tool call in it -- normally that only happens once
@@ -104,7 +108,7 @@ def run_pipeline(
         "following your system instructions."
     )
 
-    print(f"Run workspace: {run_dir}", flush=True)
+    logsink.emit(f"Run workspace: {run_dir}")
 
     invoke_config = {
         "configurable": {"thread_id": run_dir.name},
@@ -134,7 +138,7 @@ def run_pipeline(
             # blindly re-invoking into whatever just broke is more likely to
             # repeat it than fix it.
             crash_message = f"Agent run raised {type(e).__name__}: {e}"
-            print(f"[{run_dir.name}] !!! run crashed: {crash_message}", flush=True)
+            logsink.emit(f"[{run_dir.name}] !!! run crashed: {crash_message}")
             break
 
         if summary_path.is_file():
@@ -142,18 +146,16 @@ def run_pipeline(
 
         attempt += 1
         if attempt > settings.MAX_AUTO_CONTINUE_TURNS:
-            print(
+            logsink.emit(
                 f"[{run_dir.name}] !!! giving up after {attempt - 1} auto-continue "
-                "attempt(s) -- run_summary.json was never written.",
-                flush=True,
+                "attempt(s) -- run_summary.json was never written."
             )
             break
 
-        print(
+        logsink.emit(
             f"[{run_dir.name}] ... orchestrator stopped before finishing (no "
             f"run_summary.json yet) -- auto-continuing "
-            f"(attempt {attempt}/{settings.MAX_AUTO_CONTINUE_TURNS})",
-            flush=True,
+            f"(attempt {attempt}/{settings.MAX_AUTO_CONTINUE_TURNS})"
         )
         next_message = _CONTINUE_NUDGE
 

@@ -32,6 +32,13 @@ common requirement/test patterns, and terminology pitfalls. It's most
 useful during discovery, extraction, resolution, and drafting -- read it
 early and pass along relevant context to subagents when you delegate.
 
+You may also have one or more client-specific subagents available beyond
+the six listed below -- their own description tells you what each one is
+for and when to consider delegating to it. They're purely additive: never
+skip, reorder, or replace any of the fixed six phases because a
+client-specific subagent exists, and never delegate to one just because
+it's there without a concrete reason from its description.
+
 ## Two separate filesystems -- do not confuse them
 
 There are two completely unrelated filesystems in play this run, and mixing

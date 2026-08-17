@@ -1,0 +1,27 @@
+body {
+  background: #f7f8fa;
+}
+
+.card {
+  border: 1px solid #e5e7eb;
+}
+
+.nav-tabs .nav-link {
+  cursor: pointer;
+}
+
+.gen-log {
+  background: #0b1021;
+  color: #d1e7ff;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.8rem;
+  max-height: 320px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.list-group-item > div:first-child {
+  overflow-wrap: anywhere;
+}
