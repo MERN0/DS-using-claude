@@ -44,12 +44,13 @@ if str(_SYS5_DIR) not in sys.path:
     sys.path.insert(0, str(_SYS5_DIR))
 
 import builders as b  # noqa: E402
+import workspace_reader  # noqa: E402
 from fastapi import FastAPI, File, HTTPException, UploadFile  # noqa: E402
 from fastapi.responses import FileResponse  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 from sys5 import sys5 as run_sys5  # noqa: E402
-from sys5_agent.agent import logsink  # noqa: E402
+from sys5_agent.agent import logsink, run_events  # noqa: E402
 from sys5_agent.config import settings  # noqa: E402
 
 app = FastAPI(title="SYS5 Test Case Generator")
@@ -288,6 +289,12 @@ async def api_upload(files: list[UploadFile] = File(...)):
 
 _job_lock = threading.Lock()
 _job: dict[str, Any] = {"status": "idle", "log": [], "error": None, "result": None}
+# Live structured state for the run currently (or most recently) in
+# `_job` -- a fresh RunStateAggregator per run, replaced wholesale in
+# `_run_job` below so a new run never inherits a previous one's todos/
+# usage counts. Guarded by the same `_job_lock` as `_job` itself; None
+# before any generation has ever started this process.
+_run_state: run_events.RunStateAggregator | None = None
 
 
 class GenerateBody(BaseModel):
@@ -305,13 +312,26 @@ def _run_job(params: dict) -> None:
     `sys5_agent/agent/logsink.py`) for the duration so every progress line
     the pipeline already prints to stdout is *also* appended to this job's
     log for the UI to poll -- ops-visible and UI-visible at the same time,
-    from the one code path."""
+    from the one code path. Also registers a fresh `run_events` sink (see
+    `sys5_agent/agent/run_events.py`) feeding a new `RunStateAggregator`,
+    the same dual-sink pattern for structured events instead of text lines
+    -- see `/api/generate/status` and the `/api/generate/workspace*`
+    routes below for what a caller does with it."""
+    global _run_state
+    aggregator = run_events.RunStateAggregator()
+    with _job_lock:
+        _run_state = aggregator
 
     def sink(line: str) -> None:
         with _job_lock:
             _job["log"].append(line)
 
+    def event_sink(event: dict) -> None:
+        with _job_lock:
+            aggregator.handle(event)
+
     logsink.set_sink(sink)
+    run_events.set_sink(event_sink)
     try:
         result = run_sys5(**params)
         with _job_lock:
@@ -327,10 +347,12 @@ def _run_job(params: dict) -> None:
             _job["error"] = f"{type(e).__name__}: {e}"
     finally:
         logsink.set_sink(None)
+        run_events.set_sink(None)
 
 
 @app.post("/api/generate")
 def api_generate(body: GenerateBody):
+    global _run_state
     with _job_lock:
         if _job["status"] == "running":
             raise HTTPException(409, "A generation is already running -- wait for it to finish first.")
@@ -373,6 +395,7 @@ def api_generate(body: GenerateBody):
         _job["log"] = []
         _job["error"] = None
         _job["result"] = None
+        _run_state = None  # cleared now; _run_job installs a fresh one almost immediately
 
     threading.Thread(target=_run_job, args=(params,), daemon=True).start()
     return {"started": True}
@@ -382,8 +405,12 @@ def api_generate(body: GenerateBody):
 def api_generate_status(since: int = 0):
     """`since`: how many log lines the caller already has, so repeated
     polling only ever sends the new ones instead of the whole log every
-    time."""
+    time. Also carries the live structured state from `_run_state` (todos,
+    which subagent is currently running, per-subagent/skill usage counts,
+    the run's workspace path, auto-continue attempts) -- see
+    `sys5_agent/agent/run_events.py`."""
     with _job_lock:
+        snapshot = _run_state.snapshot() if _run_state is not None else {}
         return {
             "status": _job["status"],
             "log": _job["log"][since:],
@@ -391,7 +418,78 @@ def api_generate_status(since: int = 0):
             "error": _job["error"],
             "download_ready": _job["status"] == "done",
             "summary": (_job["result"] or {}).get("summary") if _job["result"] else None,
+            "todos": snapshot.get("todos", []),
+            "current_phase": snapshot.get("current_phase"),
+            "subagent_usage": snapshot.get("subagent_usage", {}),
+            "skill_usage": snapshot.get("skill_usage", {}),
+            "run_dir": snapshot.get("run_dir"),
+            "auto_continue_attempts": snapshot.get("auto_continue_attempts", 0),
         }
+
+
+def _current_run_dir() -> Path:
+    """The current (or most recently started) job's workspace directory --
+    known as soon as `agent.runner.run_pipeline` builds the agent, well
+    before the run finishes (see `run_events.emit({"type": "run_dir", ...})`
+    in `sys5_agent/agent/runner.py`). 404s rather than guessing when no
+    generation has started this process yet."""
+    with _job_lock:
+        run_dir = _run_state.snapshot().get("run_dir") if _run_state is not None else None
+    if not run_dir:
+        raise HTTPException(404, "No generation has produced a run workspace yet.")
+    return Path(run_dir)
+
+
+# ---------------------------------------------------------------------------
+# Workspace data -- read-only views over the current run's intermediate
+# files (see workspace_reader.py), scoped to whatever `_current_run_dir()`
+# resolves to right now. No historical-run browsing: this is deliberately
+# live/current-job-only, not a persisted archive (see README.md).
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/generate/workspace")
+def api_generate_workspace():
+    return workspace_reader.workspace_manifest(_current_run_dir())
+
+
+@app.get("/api/generate/workspace/clusters")
+def api_generate_workspace_clusters():
+    return workspace_reader.read_clusters(_current_run_dir())
+
+
+@app.get("/api/generate/workspace/requirements")
+def api_generate_workspace_requirements(cluster_id: str | None = None):
+    return workspace_reader.read_requirements_index(_current_run_dir(), cluster_id)
+
+
+@app.get("/api/generate/workspace/testcases")
+def api_generate_workspace_testcases():
+    return workspace_reader.read_draft_testcases_enriched(_current_run_dir())
+
+
+@app.get("/api/generate/workspace/resolved/{cluster_id}")
+def api_generate_workspace_resolved(cluster_id: str):
+    markdown = workspace_reader.read_resolved_markdown(_current_run_dir(), cluster_id)
+    if markdown is None:
+        raise HTTPException(404, f"No resolved file for cluster '{cluster_id}' (yet, or at all).")
+    return {"cluster_id": cluster_id, "markdown": markdown}
+
+
+@app.get("/api/generate/workspace/qa_report")
+def api_generate_workspace_qa_report():
+    markdown = workspace_reader.read_qa_report(_current_run_dir())
+    if markdown is None:
+        raise HTTPException(404, "No QA report yet.")
+    return {"markdown": markdown}
+
+
+@app.get("/api/generate/workspace/summary")
+def api_generate_workspace_summary():
+    summary = workspace_reader.read_run_summary(_current_run_dir())
+    if summary is None:
+        raise HTTPException(404, "No run summary yet.")
+    return summary
 
 
 @app.get("/api/generate/download")
