@@ -2,41 +2,26 @@ body {
   background: #f7f8fa;
 }
 
-.chat-bubble {
-  max-width: 85%;
+.card {
+  border: 1px solid #e5e7eb;
+}
+
+.nav-tabs .nav-link {
+  cursor: pointer;
+}
+
+.gen-log {
+  background: #0b1021;
+  color: #d1e7ff;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.8rem;
+  max-height: 320px;
+  overflow-y: auto;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
-.chat-bubble-bot {
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
-}
-
-.chat-bubble-user {
-  background: #0d6efd;
-  color: #ffffff;
-}
-
-.chat-bubble p:last-child {
-  margin-bottom: 0;
-}
-
-.chat-code {
-  background: #0b1021;
-  color: #e5e7eb;
-  padding: 0.75rem;
-  border-radius: 0.5rem;
-  font-size: 0.85rem;
-  overflow-x: auto;
-  margin: 0.5rem 0;
-}
-
-#choiceArea {
-  max-height: 40vh;
-  overflow-y: auto;
-}
-
-#textInput {
-  resize: vertical;
+.list-group-item > div:first-child {
+  overflow-wrap: anywhere;
 }

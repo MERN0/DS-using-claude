@@ -1,0 +1,268 @@
+"""
+End-to-end regression test for the FastAPI dashboard, run against a scratch
+`clients/` directory and a *mocked* `sys5()` (no real LLM available here --
+this verifies the whole job lifecycle -- upload, background thread, status
+polling, download, the single-job-at-a-time guard -- independent of what
+the pipeline itself actually does).
+
+Run with:
+    python test_app.py
+"""
+
+from __future__ import annotations
+
+import io
+import shutil
+import sys
+import time
+from pathlib import Path
+from unittest.mock import patch
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+_SCRATCH_CLIENTS = Path("/tmp/sys5_frontend_test_app_clients")
+_SCRATCH_UI = Path("/tmp/sys5_frontend_test_app_ui")
+
+# Captured once, before any test mutates settings.CLIENTS_DIR (a module-level
+# global -- once one test overwrites it, settings.default_client_dir() would
+# otherwise recompute against the *scratch* dir on every later call).
+import builders as _b_for_capture  # noqa: E402
+
+_REAL_DEFAULT_CLIENT_DIR = _b_for_capture.settings.default_client_dir()
+
+
+def _fresh_env():
+    import app as app_mod
+    import builders as b
+
+    shutil.rmtree(_SCRATCH_CLIENTS, ignore_errors=True)
+    shutil.rmtree(_SCRATCH_UI, ignore_errors=True)
+    _SCRATCH_CLIENTS.mkdir(parents=True)
+    _SCRATCH_UI.mkdir(parents=True)
+    # Swapping CLIENTS_DIR wholesale for test isolation also hides the real
+    # _default/ baseline skills that ship with the repo (settings.CLIENTS_DIR
+    # is never actually swapped in production, so _default is always there)
+    # -- carry it over so read_skill_starting_point() has something real to
+    # read, same as it would against the live clients/ directory.
+    shutil.copytree(_REAL_DEFAULT_CLIENT_DIR, _SCRATCH_CLIENTS / _REAL_DEFAULT_CLIENT_DIR.name)
+    b.settings.CLIENTS_DIR = _SCRATCH_CLIENTS
+    app_mod._UPLOADS_DIR = _SCRATCH_UI / "uploads"
+    app_mod._OUTPUTS_DIR = _SCRATCH_UI / "outputs"
+    app_mod._UPLOADS_DIR.mkdir()
+    app_mod._OUTPUTS_DIR.mkdir()
+    return app_mod, b
+
+
+def test_config_and_client_crud() -> None:
+    from starlette.testclient import TestClient
+
+    app_mod, b = _fresh_env()
+    client = TestClient(app_mod.app)
+
+    r = client.get("/")
+    assert r.status_code == 200 and "SYS5 Test Case Generator" in r.text
+
+    r = client.get("/api/config")
+    data = r.json()
+    assert "bcm" in [d["key"] for d in data["domains"]]
+    assert "writing-style" in data["skills"]
+    assert "search_sheet" in data["tools"]
+
+    r = client.post("/api/clients", json={"name": "acme"})
+    assert r.status_code == 200 and r.json()["name"] == "acme"
+
+    r = client.post("/api/clients", json={"name": "../etc"})
+    assert r.status_code == 400
+
+    print("test_config_and_client_crud: OK")
+
+
+def test_memory_skill_subagent_crud() -> None:
+    from starlette.testclient import TestClient
+
+    app_mod, b = _fresh_env()
+    client = TestClient(app_mod.app)
+
+    # Memory
+    r = client.get("/api/clients/acme/memory")
+    assert r.json()["text"] == ""
+    r = client.put("/api/clients/acme/memory", json={"text": "Always use imperial units."})
+    assert r.status_code == 200
+    r = client.get("/api/clients/acme/memory")
+    assert "imperial units" in r.json()["text"]
+    r = client.delete("/api/clients/acme/memory")
+    assert r.json()["deleted"] is True
+
+    # Skills
+    r = client.get("/api/clients/acme/skills")
+    assert r.json() == []
+    r = client.get("/api/clients/acme/skills/writing-style")
+    starting_point = r.json()
+    assert starting_point["exists"] is False
+    assert starting_point["body"]  # pre-filled from the default skill
+
+    r = client.put(
+        "/api/clients/acme/skills/writing-style",
+        json={"description": "Acme style.", "body": "Imperial units only."},
+    )
+    assert r.status_code == 200
+    r = client.get("/api/clients/acme/skills")
+    assert r.json() == [{"name": "writing-style", "description": "Acme style."}]
+
+    r = client.put("/api/clients/acme/skills/not-a-real-skill", json={"description": "x", "body": "y"})
+    assert r.status_code == 400
+
+    r = client.delete("/api/clients/acme/skills/writing-style")
+    assert r.json()["deleted"] is True
+
+    # Subagents
+    r = client.get("/api/clients/acme/subagents")
+    assert r.json() == []
+    r = client.put(
+        "/api/clients/acme/subagents/extra-checks",
+        json={
+            "description": "Cross-checks ISO 26262 tagging.",
+            "prompt_body": "Check the ASIL column.",
+            "tools": ["search_sheet", "bogus_tool"],
+            "skills": ["domain-knowledge"],
+        },
+    )
+    assert r.status_code == 400  # bogus_tool rejected
+
+    r = client.put(
+        "/api/clients/acme/subagents/extra-checks",
+        json={
+            "description": "Cross-checks ISO 26262 tagging.",
+            "prompt_body": "Check the ASIL column.",
+            "tools": ["search_sheet"],
+            "skills": ["domain-knowledge"],
+        },
+    )
+    assert r.status_code == 200
+    r = client.get("/api/clients/acme/subagents/extra-checks")
+    assert r.json()["tools"] == ["search_sheet"]
+    r = client.get("/api/clients/acme/subagents")
+    assert len(r.json()) == 1
+    r = client.delete("/api/clients/acme/subagents/extra-checks")
+    assert r.json()["deleted"] is True
+    r = client.get("/api/clients/acme/subagents/extra-checks")
+    assert r.status_code == 404
+
+    print("test_memory_skill_subagent_crud: OK")
+
+
+def test_upload_and_generate_lifecycle() -> None:
+    from starlette.testclient import TestClient
+
+    app_mod, b = _fresh_env()
+    client = TestClient(app_mod.app)
+
+    files = [
+        ("files", ("SYS2_Requirements.xlsx", io.BytesIO(b"fake xlsx bytes"), "application/octet-stream")),
+        ("files", ("Signals.xlsx", io.BytesIO(b"fake xlsx bytes"), "application/octet-stream")),
+    ]
+    r = client.post("/api/upload", files=files)
+    assert r.status_code == 200
+    upload = r.json()
+    assert sorted(upload["files"]) == ["SYS2_Requirements.xlsx", "Signals.xlsx"]
+    upload_id = upload["upload_id"]
+
+    # Fake a completed run: write an output file and have the mocked sys5()
+    # return the same shape the real one does.
+    def fake_sys5(**kwargs):
+        from sys5_agent.agent import logsink
+
+        logsink.emit("[fake] discovery phase...")
+        time.sleep(0.3)  # gives the concurrent-request assertion below a real window to observe "running" in
+        logsink.emit("[fake] writing output...")
+        output_dir = Path(kwargs["output_folder_path"])
+        output_path = output_dir / f"{kwargs['project_name']}_SYS5_{kwargs['current_version']}.xlsx"
+        output_path.write_bytes(b"fake generated workbook")
+        return {
+            "success": True,
+            "output_path": str(output_path),
+            "run_dir": str(output_dir),
+            "summary": {"requirements_found": 3},
+            "final_message": "Done.",
+        }
+
+    with patch.object(app_mod, "run_sys5", side_effect=fake_sys5):
+        r = client.post(
+            "/api/generate",
+            json={
+                "client": "acme",
+                "domain": "bcm",
+                "output_format": "xlsx",
+                "username": "tester",
+                "current_version": "v1",
+                "upload_id": upload_id,
+                "requirement_filename": "SYS2_Requirements.xlsx",
+            },
+        )
+        assert r.status_code == 200, r.text
+
+        # A second concurrent generate must be rejected.
+        r2 = client.post(
+            "/api/generate",
+            json={
+                "client": "acme",
+                "domain": "bcm",
+                "output_format": "xlsx",
+                "username": "tester",
+                "current_version": "v1",
+                "upload_id": upload_id,
+                "requirement_filename": "SYS2_Requirements.xlsx",
+            },
+        )
+        assert r2.status_code == 409
+
+        deadline = time.time() + 5
+        status = None
+        while time.time() < deadline:
+            status = client.get("/api/generate/status").json()
+            if status["status"] != "running":
+                break
+            time.sleep(0.05)
+        assert status is not None and status["status"] == "done", status
+        assert status["download_ready"] is True
+        assert status["summary"] == {"requirements_found": 3}
+        assert any("fake" in line for line in status["log"]) or status["log_total"] > 0
+
+        r = client.get("/api/generate/download")
+        assert r.status_code == 200
+        assert r.content == b"fake generated workbook"
+
+    print("test_upload_and_generate_lifecycle: OK")
+
+
+def test_generate_rejects_bad_input() -> None:
+    from starlette.testclient import TestClient
+
+    app_mod, b = _fresh_env()
+    client = TestClient(app_mod.app)
+
+    r = client.post(
+        "/api/generate",
+        json={
+            "client": "acme",
+            "domain": "not-a-real-domain",
+            "output_format": "xlsx",
+            "username": "tester",
+            "current_version": "v1",
+            "upload_id": "does-not-exist",
+            "requirement_filename": "whatever.xlsx",
+        },
+    )
+    assert r.status_code == 400
+
+    print("test_generate_rejects_bad_input: OK")
+
+
+if __name__ == "__main__":
+    test_config_and_client_crud()
+    test_memory_skill_subagent_crud()
+    test_upload_and_generate_lifecycle()
+    test_generate_rejects_bad_input()
+    shutil.rmtree(_SCRATCH_CLIENTS, ignore_errors=True)
+    shutil.rmtree(_SCRATCH_UI, ignore_errors=True)
+    print("ALL OK")

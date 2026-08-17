@@ -77,10 +77,11 @@ every later section assumes you know what these mean.
 ## Repository layout
 
 ```
-frontend/                        <- chat UI for authoring client customizations
-├── app.py                        <- FastAPI app (2 routes + static/templates)
-├── state.py                      <- the chat's step-by-step conversation logic
+frontend/                        <- dashboard for config + running a generation
+├── app.py                        <- FastAPI routes: config, CRUD, upload, generate/status/download
 ├── builders.py                   <- the only code that writes clients/<name>/ files
+├── test_app.py                   <- end-to-end regression test (mocked sys5())
+├── uploads/, outputs/            <- this UI's own scratch space (gitignored)
 └── README.md                     <- what it does, how to run it
 
 backend/code/artifacts/SYS5/
@@ -119,14 +120,16 @@ backend/code/artifacts/SYS5/
                                      backend always supplies its own instead)
 ```
 
-**Authoring client customizations without hand-writing files:** `frontend/`
-(repo root, a sibling of `backend/`) is a small FastAPI chat app that walks
-you through creating/editing/deleting a client's memory rules, skill
-overrides, and custom subagents, explaining each concept as it comes up
-and validating everything against exactly what the pipeline expects
-before saving. See [`frontend/README.md`](../../../../frontend/README.md).
-It only authors files under `clients/<name>/` — running an actual
-generation is still done the normal way (below).
+**A dashboard, instead of hand-writing files and the CLI:** `frontend/`
+(repo root, a sibling of `backend/`) is a small FastAPI app with a form-based
+UI for creating/editing/deleting a client's memory rules, skill overrides,
+and custom subagents, validating everything against exactly what the
+pipeline expects before saving — plus uploading input files and clicking
+Generate to run a real `sys5()` cycle in the background, with live progress
+and a download link when it's done. See
+[`frontend/README.md`](../../../../frontend/README.md). It runs at most one
+generation at a time; the CLI/`sys5()` call below is still how a real
+backend integration or a scripted/batch run would call this pipeline.
 
 ## The big picture
 
@@ -862,7 +865,7 @@ run that passes `--domain <name>`.
 `skills/<name>/SKILL.md` there overrides the same-named baseline (or
 domain) skill for that client only. A project with no such directory yet
 still runs fine on baseline rules alone — this is purely additive. The
-[chat UI](../../../../frontend/README.md) does exactly this through a guided conversation
+[dashboard](../../../../frontend/README.md) does exactly this through a form
 instead of hand-editing files, and also supports **editing/deleting** an
 existing override, not just creating new ones.
 
@@ -875,7 +878,7 @@ fixed six every run already has — always additive, never a replacement for
 the six-phase pipeline. An unknown tool/skill name, or a file that fails
 to parse at all, is dropped with a printed warning rather than failing the
 run (see that module's docstring for the exact format and every failure
-mode it tolerates). The [chat UI](../../../../frontend/README.md) is the easiest way to
+mode it tolerates). The [dashboard](../../../../frontend/README.md) is the easiest way to
 author one correctly.
 
 **Add a new tool:** follow the existing pattern in `tools/excel_tools.py`

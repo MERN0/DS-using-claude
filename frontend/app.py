@@ -1,10 +1,14 @@
 """
-FastAPI app serving the client-customization chat UI.
+FastAPI app: a dashboard for configuring a client's SYS5 pipeline
+customizations, uploading input files, and running a real generation.
 
-This process only authors files under `clients/<name>/` (memory rules,
-skill overrides, custom subagents) via `builders.py`/`state.py` -- it never
-invokes `sys5()` or runs a real generation. Deliberate scope boundary, not
-an oversight: see `README.md` in this directory.
+Unlike an earlier chat-based version of this UI, this is a stateless REST
+API plus a single-page dashboard -- every request carries whatever
+client/data it needs itself, no server-side conversation session. The one
+piece of server-side state is the single in-process generation job (see
+`_job` below): this app only ever runs one generation at a time, checked
+and enforced in `/api/generate` -- a deliberate simplification (see
+`README.md`), not an oversight.
 
 Run with:
     pip install -r requirements.txt
@@ -15,34 +19,48 @@ then open http://localhost:5050/
 from __future__ import annotations
 
 import os
+import shutil
 import sys
+import threading
+import uuid
 from pathlib import Path
+from typing import Any, Optional
 
 _FRONTEND_DIR = Path(__file__).resolve().parent
 # This file lives in frontend/ at the repo root, a sibling of backend/ --
-# not nested under the SYS5 package -- so the path to sys5_agent has to be
-# spelled out rather than assumed to be this file's own parent directory.
+# not nested under the SYS5 package -- so the path to sys5_agent/sys5.py
+# has to be spelled out rather than assumed to be this file's own parent
+# directory.
 _REPO_ROOT = _FRONTEND_DIR.parent
 _SYS5_DIR = _REPO_ROOT / "backend" / "code" / "artifacts" / "SYS5"
 if str(_SYS5_DIR) not in sys.path:
     sys.path.insert(0, str(_SYS5_DIR))
 
-from fastapi import FastAPI, Request  # noqa: E402
-from fastapi.responses import HTMLResponse, JSONResponse  # noqa: E402
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile  # noqa: E402
+from fastapi.responses import FileResponse, HTMLResponse  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 from fastapi.templating import Jinja2Templates  # noqa: E402
-from starlette.middleware.sessions import SessionMiddleware  # noqa: E402
+from pydantic import BaseModel  # noqa: E402
 
-import state  # noqa: E402
+import builders as b  # noqa: E402
+from sys5 import sys5 as run_sys5  # noqa: E402
+from sys5_agent.agent import logsink  # noqa: E402
+from sys5_agent.config import settings  # noqa: E402
 
-app = FastAPI(title="SYS5 Client Setup")
-# A throwaway per-process default is fine here: this session only ever
-# holds which client is being edited and an in-progress draft, nothing
-# sensitive, and losing it just means starting the chat over. Set
-# SYS5_UI_SECRET_KEY to something real for anything beyond local use.
-app.add_middleware(SessionMiddleware, secret_key=os.environ.get("SYS5_UI_SECRET_KEY", os.urandom(24).hex()))
+app = FastAPI(title="SYS5 Test Case Generator")
 app.mount("/static", StaticFiles(directory=str(_FRONTEND_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(_FRONTEND_DIR / "templates"))
+
+# Per-upload scratch space, owned entirely by this UI (never read by
+# anything else): each upload gets its own input/ dir so two browser tabs
+# uploading at the same time can never collide, and each generation writes
+# into the matching outputs/<upload_id>/ dir so the download endpoint
+# always knows exactly where to look. Not automatically cleaned up --
+# see README.md.
+_UPLOADS_DIR = _FRONTEND_DIR / "uploads"
+_OUTPUTS_DIR = _FRONTEND_DIR / "outputs"
+_UPLOADS_DIR.mkdir(exist_ok=True)
+_OUTPUTS_DIR.mkdir(exist_ok=True)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -50,41 +68,332 @@ def index(request: Request):
     return templates.TemplateResponse(request, "index.html")
 
 
-@app.post("/api/start")
-def api_start(request: Request):
-    """Resets the conversation and returns the opening bot turn -- called
-    once on page load, and again for "switch client" / "start over"."""
-    request.session.clear()
-    request.session.update(state.start_session())
-    return JSONResponse(_run(request.session, {}))
+# ---------------------------------------------------------------------------
+# Config / reference data -- one call the page makes on load to get every
+# picklist it needs, all derived from the real settings/tool/skill
+# definitions rather than duplicated by hand.
+# ---------------------------------------------------------------------------
 
 
-@app.post("/api/chat")
-async def api_chat(request: Request):
-    if "step" not in request.session:
-        return JSONResponse({"error": "Session expired -- refresh the page."}, status_code=400)
+@app.get("/api/config")
+def api_config():
+    return {
+        "domains": [{"key": d, "label": settings.DOMAIN_LABELS.get(d, d)} for d in settings.DOMAINS],
+        "output_formats": settings.SUPPORTED_OUTPUT_FORMATS,
+        "clients": b.list_clients(),
+        "tools": b.available_tools(),
+        "skills": b.OVERRIDABLE_SKILLS,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Clients
+# ---------------------------------------------------------------------------
+
+
+class ClientName(BaseModel):
+    name: str
+
+
+@app.post("/api/clients")
+def api_create_client(body: ClientName):
     try:
-        payload = await request.json()
-    except Exception:  # noqa: BLE001 -- empty/non-JSON body is a valid "no input" turn
-        payload = {}
-    return JSONResponse(_run(request.session, payload or {}))
+        name = b.validate_client_name(body.name)
+    except b.ValidationError as e:
+        raise HTTPException(400, str(e)) from e
+    # Nothing to write to disk yet -- a client with no customizations still
+    # runs fine on baseline rules alone (see builders.py). This just
+    # confirms the name is usable; it starts showing up in list_clients()
+    # once something is actually saved for it.
+    return {"name": name}
 
 
-def _run(sess, payload: dict) -> dict:
-    """Runs one state-machine turn, never letting a bug in one chat step
-    crash the whole page -- the user just sees an error bubble and can
-    keep going from the main menu instead of a broken request."""
+# ---------------------------------------------------------------------------
+# Memory
+# ---------------------------------------------------------------------------
+
+
+class MemoryBody(BaseModel):
+    text: str
+
+
+@app.get("/api/clients/{client}/memory")
+def api_get_memory(client: str):
+    return {"text": b.read_client_memory(client)}
+
+
+@app.put("/api/clients/{client}/memory")
+def api_put_memory(client: str, body: MemoryBody):
     try:
-        return state.process(sess, payload)
-    except Exception as e:  # noqa: BLE001 -- see docstring
-        sess["step"] = "main_menu" if sess.get("client") else "welcome"
+        b.write_client_memory(client, body.text)
+    except b.ValidationError as e:
+        raise HTTPException(400, str(e)) from e
+    return {"text": b.read_client_memory(client)}
+
+
+@app.delete("/api/clients/{client}/memory")
+def api_delete_memory(client: str):
+    b.delete_client_memory(client)
+    return {"deleted": True}
+
+
+# ---------------------------------------------------------------------------
+# Skill overrides
+# ---------------------------------------------------------------------------
+
+
+class SkillBody(BaseModel):
+    description: str
+    body: str
+
+
+@app.get("/api/clients/{client}/skills")
+def api_list_skills(client: str):
+    out = []
+    for name in b.list_client_skill_overrides(client):
+        existing = b.read_client_skill_override(client, name)
+        out.append({"name": name, "description": existing[0] if existing else ""})
+    return out
+
+
+@app.get("/api/clients/{client}/skills/{name}")
+def api_get_skill(client: str, name: str, base_domain: Optional[str] = None):
+    """Returns the client's existing override if it has one; otherwise a
+    starting point to edit (the current baseline skill, or -- for
+    domain-knowledge, which needs `base_domain` -- that domain's current
+    skill) so the editor never opens empty."""
+    existing = b.read_client_skill_override(client, name)
+    if existing:
+        return {"description": existing[0], "body": existing[1], "exists": True}
+    desc, body = b.read_skill_starting_point(name, base_domain)
+    return {"description": desc, "body": body, "exists": False}
+
+
+@app.put("/api/clients/{client}/skills/{name}")
+def api_put_skill(client: str, name: str, payload: SkillBody):
+    try:
+        b.write_skill_override(client, name, payload.description, payload.body)
+    except b.ValidationError as e:
+        raise HTTPException(400, str(e)) from e
+    return {"saved": True}
+
+
+@app.delete("/api/clients/{client}/skills/{name}")
+def api_delete_skill(client: str, name: str):
+    b.delete_skill_override(client, name)
+    return {"deleted": True}
+
+
+# ---------------------------------------------------------------------------
+# Custom subagents
+# ---------------------------------------------------------------------------
+
+
+class SubagentBody(BaseModel):
+    description: str
+    prompt_body: str
+    tools: list[str] = []
+    skills: list[str] = []
+
+
+@app.get("/api/clients/{client}/subagents")
+def api_list_subagents(client: str):
+    return b.list_custom_subagents(client)
+
+
+@app.get("/api/clients/{client}/subagents/{name}")
+def api_get_subagent(client: str, name: str):
+    draft = b.read_custom_subagent(client, name)
+    if draft is None:
+        raise HTTPException(404, "No such subagent.")
+    return {
+        "description": draft.description,
+        "prompt_body": draft.prompt_body,
+        "tools": draft.tools,
+        "skills": draft.skills,
+    }
+
+
+@app.put("/api/clients/{client}/subagents/{name}")
+def api_put_subagent(client: str, name: str, payload: SubagentBody):
+    draft = b.SubagentDraft(
+        name=name,
+        description=payload.description,
+        prompt_body=payload.prompt_body,
+        tools=payload.tools,
+        skills=payload.skills,
+    )
+    try:
+        b.write_custom_subagent(client, draft)
+    except b.ValidationError as e:
+        raise HTTPException(400, str(e)) from e
+    return {"saved": True}
+
+
+@app.delete("/api/clients/{client}/subagents/{name}")
+def api_delete_subagent(client: str, name: str):
+    b.delete_custom_subagent(client, name)
+    return {"deleted": True}
+
+
+# ---------------------------------------------------------------------------
+# File upload -- the requirements workbook plus whatever supporting
+# documents (signal list, command list, etc.) a run needs, all at once.
+# ---------------------------------------------------------------------------
+
+
+@app.post("/api/upload")
+async def api_upload(files: list[UploadFile] = File(...)):
+    if not files:
+        raise HTTPException(400, "No files uploaded.")
+    upload_id = uuid.uuid4().hex
+    input_dir = _UPLOADS_DIR / upload_id / "input"
+    input_dir.mkdir(parents=True)
+    saved = []
+    for f in files:
+        name = Path(f.filename or "").name  # strip any client-supplied path component
+        if not name:
+            continue
+        with (input_dir / name).open("wb") as out:
+            shutil.copyfileobj(f.file, out)
+        saved.append(name)
+    if not saved:
+        shutil.rmtree(input_dir.parent, ignore_errors=True)
+        raise HTTPException(400, "No valid files in that upload.")
+    return {"upload_id": upload_id, "files": sorted(saved)}
+
+
+# ---------------------------------------------------------------------------
+# Generate -- runs the real pipeline in a background thread (sys5() is a
+# long, blocking, synchronous call; running it directly on the request
+# would tie up the connection for however long generation takes, easily
+# many minutes) and exposes its progress/result through small polling
+# endpoints instead.
+# ---------------------------------------------------------------------------
+
+_job_lock = threading.Lock()
+_job: dict[str, Any] = {"status": "idle", "log": [], "error": None, "result": None}
+
+
+class GenerateBody(BaseModel):
+    client: str
+    domain: str
+    output_format: str = "xlsx"
+    username: str
+    current_version: str
+    upload_id: str
+    requirement_filename: str
+
+
+def _run_job(params: dict) -> None:
+    """Runs on a background thread. Registers a logsink (see
+    `sys5_agent/agent/logsink.py`) for the duration so every progress line
+    the pipeline already prints to stdout is *also* appended to this job's
+    log for the UI to poll -- ops-visible and UI-visible at the same time,
+    from the one code path."""
+
+    def sink(line: str) -> None:
+        with _job_lock:
+            _job["log"].append(line)
+
+    logsink.set_sink(sink)
+    try:
+        result = run_sys5(**params)
+        with _job_lock:
+            _job["result"] = result
+            if result["success"]:
+                _job["status"] = "done"
+            else:
+                _job["status"] = "error"
+                _job["error"] = result.get("final_message") or "Run finished without producing an output file."
+    except Exception as e:  # noqa: BLE001 -- reported through job status, must never crash the server thread
+        with _job_lock:
+            _job["status"] = "error"
+            _job["error"] = f"{type(e).__name__}: {e}"
+    finally:
+        logsink.set_sink(None)
+
+
+@app.post("/api/generate")
+def api_generate(body: GenerateBody):
+    with _job_lock:
+        if _job["status"] == "running":
+            raise HTTPException(409, "A generation is already running -- wait for it to finish first.")
+
+    try:
+        client = b.validate_client_name(body.client)
+    except b.ValidationError as e:
+        raise HTTPException(400, str(e)) from e
+
+    normalized_domain = settings.normalize_domain(body.domain)
+    if normalized_domain not in settings.DOMAINS:
+        raise HTTPException(400, f"Unknown domain '{body.domain}'.")
+    if body.output_format not in settings.SUPPORTED_OUTPUT_FORMATS:
+        raise HTTPException(400, f"Unsupported output format '{body.output_format}'.")
+    if not body.username.strip() or not body.current_version.strip():
+        raise HTTPException(400, "Username and version can't be empty.")
+
+    input_dir = _UPLOADS_DIR / body.upload_id / "input"
+    if not input_dir.is_dir():
+        raise HTTPException(400, "Unknown upload_id -- upload your files again.")
+    if not (input_dir / body.requirement_filename).is_file():
+        raise HTTPException(400, f"'{body.requirement_filename}' isn't among the uploaded files.")
+
+    output_dir = _OUTPUTS_DIR / body.upload_id
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    params = dict(
+        domain=body.domain,
+        output_format=body.output_format,
+        project_name=client,
+        username=body.username,
+        current_version=body.current_version,
+        input_folder_path=str(input_dir),
+        output_folder_path=str(output_dir),
+        requirement_filename=body.requirement_filename,
+    )
+
+    with _job_lock:
+        _job["status"] = "running"
+        _job["log"] = []
+        _job["error"] = None
+        _job["result"] = None
+
+    threading.Thread(target=_run_job, args=(params,), daemon=True).start()
+    return {"started": True}
+
+
+@app.get("/api/generate/status")
+def api_generate_status(since: int = 0):
+    """`since`: how many log lines the caller already has, so repeated
+    polling only ever sends the new ones instead of the whole log every
+    time."""
+    with _job_lock:
         return {
-            "messages": [f"Something went wrong on that step ({type(e).__name__}: {e}). Let's back up."],
-            "kind": "buttons" if sess.get("client") else "text",
-            "choices": state._MAIN_MENU_CHOICES if sess.get("client") else [],
-            "placeholder": "",
-            "prefill": "",
+            "status": _job["status"],
+            "log": _job["log"][since:],
+            "log_total": len(_job["log"]),
+            "error": _job["error"],
+            "download_ready": _job["status"] == "done",
+            "summary": (_job["result"] or {}).get("summary") if _job["result"] else None,
         }
+
+
+@app.get("/api/generate/download")
+def api_generate_download():
+    with _job_lock:
+        result = _job["result"]
+        status = _job["status"]
+    if status != "done" or not result:
+        raise HTTPException(400, "No completed generation to download yet.")
+    output_path = Path(result["output_path"])
+    if not output_path.is_file():
+        raise HTTPException(410, "The output file is no longer on disk.")
+    return FileResponse(
+        output_path,
+        filename=output_path.name,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
 
 
 if __name__ == "__main__":

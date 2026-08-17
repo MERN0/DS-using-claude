@@ -36,14 +36,15 @@ from sys5_agent.tools.excel_tools import build_read_only_tools  # noqa: E402
 
 class ValidationError(ValueError):
     """Raised for any input the pipeline itself would refuse to load --
-    always caught by app.py and turned into a chat error bubble, never a
+    always caught by app.py and turned into a 4xx JSON error, never a
     500."""
 
 
 # ---------------------------------------------------------------------------
-# Reference data the chat flow shows the user -- derived from the real
-# implementations rather than duplicated by hand, so this can never drift
-# out of sync with what the pipeline actually supports.
+# Reference data the dashboard shows the user (picklists, explanatory
+# labels) -- derived from the real implementations rather than duplicated
+# by hand, so this can never drift out of sync with what the pipeline
+# actually supports.
 # ---------------------------------------------------------------------------
 
 

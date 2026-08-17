@@ -25,7 +25,7 @@ error here is logged (printed, so it shows up the same way
 `agent/progress.py`'s live logging does) and that one file is skipped
 rather than raised.
 
-The chat UI at `frontend/` (repo root, a sibling of `backend/`) is what
+The dashboard at `frontend/` (repo root, a sibling of `backend/`) is what
 actually writes these files today, but the format is deliberately
 hand-editable too -- nothing here depends on how a file was created.
 """

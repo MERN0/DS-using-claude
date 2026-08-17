@@ -15,9 +15,12 @@ to restructure the call into a stream loop.
 
 `task` calls (an orchestrator delegating to a subagent) are logged as a
 named phase transition (">>> Delegating to discovery-agent: ..."); every
-other tool call is logged as a single compact line. This is deliberately
-terminal output (`print`), not `logging`, to match how the CLI already
-reports progress -- see `sys5_agent/main.py`.
+other tool call is logged as a single compact line. Lines go through
+`agent/logsink.py`'s `emit()` rather than a bare `print()` -- every line
+still always prints to stdout (matching how the CLI already reports
+progress, see `sys5_agent/main.py`), but this also lets a caller like the
+web UI (`frontend/app.py`) capture the same lines for a live-progress
+display, without needing to restructure this into a stream loop.
 """
 
 from __future__ import annotations
@@ -27,6 +30,8 @@ from typing import Any, Optional
 from uuid import UUID
 
 from langchain_core.callbacks import BaseCallbackHandler
+
+from sys5_agent.agent import logsink
 
 _MAX_LINE = 160
 
@@ -64,11 +69,11 @@ class ProgressLogger(BaseCallbackHandler):
             subagent_type = args.get("subagent_type", "?")
             description = args.get("description", "")
             self._task_calls[run_id] = (subagent_type, time.monotonic())
-            print(f"[{_timestamp()}] >>> delegating to {subagent_type}: {_truncate(description)}", flush=True)
+            logsink.emit(f"[{_timestamp()}] >>> delegating to {subagent_type}: {_truncate(description)}")
             return
 
         self._other_calls[run_id] = time.monotonic()
-        print(f"[{_timestamp()}]     {name}({_truncate(args)})", flush=True)
+        logsink.emit(f"[{_timestamp()}]     {name}({_truncate(args)})")
 
     def on_tool_end(self, output: Any, *, run_id: UUID, **kwargs: Any) -> None:
         task_entry = self._task_calls.pop(run_id, None)
@@ -76,10 +81,7 @@ class ProgressLogger(BaseCallbackHandler):
             subagent_type, started_at = task_entry
             elapsed = time.monotonic() - started_at
             summary = getattr(output, "content", output)
-            print(
-                f"[{_timestamp()}] <<< {subagent_type} finished in {elapsed:.1f}s: {_truncate(summary)}",
-                flush=True,
-            )
+            logsink.emit(f"[{_timestamp()}] <<< {subagent_type} finished in {elapsed:.1f}s: {_truncate(summary)}")
             return
         self._other_calls.pop(run_id, None)
 
@@ -88,11 +90,10 @@ class ProgressLogger(BaseCallbackHandler):
         if task_entry is not None:
             subagent_type, started_at = task_entry
             elapsed = time.monotonic() - started_at
-            print(
+            logsink.emit(
                 f"[{_timestamp()}] !!! {subagent_type} FAILED after {elapsed:.1f}s: "
-                f"{type(error).__name__}: {_truncate(error)}",
-                flush=True,
+                f"{type(error).__name__}: {_truncate(error)}"
             )
             return
         self._other_calls.pop(run_id, None)
-        print(f"[{_timestamp()}] !!! tool error: {type(error).__name__}: {_truncate(error)}", flush=True)
+        logsink.emit(f"[{_timestamp()}] !!! tool error: {type(error).__name__}: {_truncate(error)}")
