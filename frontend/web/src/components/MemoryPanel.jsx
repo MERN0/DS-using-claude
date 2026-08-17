@@ -56,10 +56,14 @@ export default function MemoryPanel({ client, baselineMemory }) {
             Baseline rules
           </SectionTitle>
           <p className="text-sm text-ink-500 mb-3">
-            These rules already apply to every project's runs, before anything below is
-            added. Read-only here &mdash; edit the project-specific addition instead.
+            These rules already apply to every project's runs, before anything below is added. Read-only here
+            &mdash; edit the project-specific addition instead.
           </p>
-          <Button size="sm" icon={showBaseline ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />} onClick={() => setShowBaseline((v) => !v)}>
+          <Button
+            size="sm"
+            icon={showBaseline ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+            onClick={() => setShowBaseline((v) => !v)}
+          >
             {showBaseline ? "Hide baseline rules" : "Show baseline rules"}
           </Button>
           <AnimatePresence initial={false}>
@@ -84,9 +88,9 @@ export default function MemoryPanel({ client, baselineMemory }) {
             This project's addition
           </SectionTitle>
           <p className="text-sm text-ink-500 mb-3">
-            A standing instruction, always in effect for this project's runs (e.g. "Variant
-            is always N/A for this project"). Appended after the baseline rules above &mdash;
-            write it as an addition, not a full restatement.
+            A standing instruction, always in effect for this project's runs (e.g. "Variant is always N/A for
+            this project"). Appended after the baseline rules above &mdash; write it as an addition, not a
+            full restatement.
           </p>
           {loading ? (
             <div className="flex h-32 items-center justify-center text-ink-300">
@@ -102,7 +106,12 @@ export default function MemoryPanel({ client, baselineMemory }) {
                 className="mb-3"
               />
               <div className="flex items-center gap-2">
-                <Button tone="primary" icon={saving ? <Spinner className="h-4 w-4" /> : <Save className="h-4 w-4" />} disabled={saving} onClick={save}>
+                <Button
+                  tone="primary"
+                  icon={saving ? <Spinner className="h-4 w-4" /> : <Save className="h-4 w-4" />}
+                  disabled={saving}
+                  onClick={save}
+                >
                   Save
                 </Button>
                 <Button tone="danger" icon={<Trash2 className="h-4 w-4" />} onClick={remove}>

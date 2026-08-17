@@ -1,0 +1,19 @@
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+extend-exclude = ["frontend/web/node_modules", "frontend/web/dist"]
+
+[tool.ruff.lint]
+# E/F: pyflakes/pycodestyle core correctness. I: import sorting (this
+# codebase already hand-sorts imports with `# noqa: E402` path-bootstrap
+# comments -- I catches drift going forward). UP: pyupgrade (keeps syntax
+# on py311 idioms). B: bugbear (catches common correctness footguns beyond
+# plain pyflakes).
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's dependency-injection convention requires exactly this
+# "function call in a default argument" shape (`File(...)`, `Depends(...)`,
+# `Query(...)`) -- B008 doesn't know that and would otherwise flag correct,
+# idiomatic FastAPI code as a bug.
+extend-immutable-calls = ["fastapi.File", "fastapi.Depends", "fastapi.Query", "fastapi.Body", "fastapi.Header"]

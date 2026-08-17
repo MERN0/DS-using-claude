@@ -27,14 +27,13 @@ UI that authors them.
 from __future__ import annotations
 
 import shutil
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from deepagents import create_deep_agent
 from deepagents.backends.filesystem import FilesystemBackend
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import InMemorySaver
-
 from sys5_agent.agent.custom_subagents import load_custom_subagents
 from sys5_agent.agent.prompts import ORCHESTRATOR_SYSTEM_PROMPT
 from sys5_agent.agent.subagents import build_subagents
@@ -43,7 +42,7 @@ from sys5_agent.tools.excel_tools import build_write_tool
 
 
 def _new_run_dir() -> Path:
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
     run_dir = settings.RUNS_DIR / stamp
     (run_dir / "memory").mkdir(parents=True, exist_ok=True)
     (run_dir / "skills").mkdir(parents=True, exist_ok=True)

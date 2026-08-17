@@ -26,11 +26,10 @@ display, without needing to restructure this into a stream loop.
 from __future__ import annotations
 
 import time
-from typing import Any, Optional
+from typing import Any
 from uuid import UUID
 
 from langchain_core.callbacks import BaseCallbackHandler
-
 from sys5_agent.agent import logsink
 
 _MAX_LINE = 160
@@ -59,7 +58,7 @@ class ProgressLogger(BaseCallbackHandler):
         input_str: str,
         *,
         run_id: UUID,
-        inputs: Optional[dict[str, Any]] = None,
+        inputs: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> None:
         name = (serialized or {}).get("name") or "tool"

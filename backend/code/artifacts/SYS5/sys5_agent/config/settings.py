@@ -36,10 +36,10 @@ def validate_safe_name(name: str, label: str) -> str:
     name = str(name).strip()
     if not name or not _SAFE_NAME_RE.match(name) or ".." in name:
         raise ValueError(
-            f"Invalid {label} {name!r}: must contain only letters, digits, "
-            "'_', '-', '.' (no path separators, no '..')."
+            f"Invalid {label} {name!r}: must contain only letters, digits, '_', '-', '.' (no path separators, no '..')."
         )
     return name
+
 
 # ---------------------------------------------------------------------------
 # Automotive domains

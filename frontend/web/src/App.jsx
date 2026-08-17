@@ -64,7 +64,12 @@ export default function App() {
     <ToastProvider>
       <Header />
       <main className="mx-auto max-w-5xl px-6 py-8">
-        <ClientPicker clients={clients} currentClient={currentClient} onSelect={selectClient} onCreated={onCreated} />
+        <ClientPicker
+          clients={clients}
+          currentClient={currentClient}
+          onSelect={selectClient}
+          onCreated={onCreated}
+        />
 
         {currentClient && (
           <>
@@ -77,13 +82,26 @@ export default function App() {
                 exit={{ opacity: 0, y: -8 }}
                 transition={{ duration: 0.18 }}
               >
-                {tab === "memory" && <MemoryPanel client={currentClient} baselineMemory={config.baseline_memory} />}
-                {tab === "skills" && <SkillsPanel client={currentClient} skills={config.skills} domains={config.domains} />}
+                {tab === "memory" && (
+                  <MemoryPanel client={currentClient} baselineMemory={config.baseline_memory} />
+                )}
+                {tab === "skills" && (
+                  <SkillsPanel client={currentClient} skills={config.skills} domains={config.domains} />
+                )}
                 {tab === "subagents" && (
-                  <SubagentsPanel client={currentClient} builtIn={config.built_in_subagents} tools={config.tools} skills={config.skills} />
+                  <SubagentsPanel
+                    client={currentClient}
+                    builtIn={config.built_in_subagents}
+                    tools={config.tools}
+                    skills={config.skills}
+                  />
                 )}
                 {tab === "generate" && (
-                  <GeneratePanel client={currentClient} domains={config.domains} outputFormats={config.output_formats} />
+                  <GeneratePanel
+                    client={currentClient}
+                    domains={config.domains}
+                    outputFormats={config.output_formats}
+                  />
                 )}
               </motion.div>
             </AnimatePresence>
@@ -91,7 +109,8 @@ export default function App() {
         )}
       </main>
       <footer className="py-10 text-center text-xs text-ink-300">
-        Runs locally · configuration lives under <code className="text-ink-400">clients/&lt;project&gt;/</code>
+        Runs locally · configuration lives under{" "}
+        <code className="text-ink-400">clients/&lt;project&gt;/</code>
       </footer>
     </ToastProvider>
   );

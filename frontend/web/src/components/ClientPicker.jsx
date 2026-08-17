@@ -35,9 +35,8 @@ export default function ClientPicker({ clients, currentClient, onSelect, onCreat
           <div className="min-w-0 flex-1">
             <h2 className="text-[15px] font-semibold text-ink-900">Project</h2>
             <p className="mt-0.5 text-sm text-ink-500 max-w-2xl">
-              A project (client) is a folder of extra rules, skill overrides, and custom
-              subagents layered on top of the standard behavior. Nothing customized yet?
-              It still runs fine on the defaults.
+              A project (client) is a folder of extra rules, skill overrides, and custom subagents layered on
+              top of the standard behavior. Nothing customized yet? It still runs fine on the defaults.
             </p>
 
             <div className="mt-4 flex flex-wrap items-center gap-2.5">
@@ -61,7 +60,12 @@ export default function ClientPicker({ clients, currentClient, onSelect, onCreat
                 placeholder="new-project-name"
                 className="max-w-[220px]"
               />
-              <Button tone="primary" icon={<Plus className="h-4 w-4" />} disabled={busy || !newName.trim()} onClick={createClient}>
+              <Button
+                tone="primary"
+                icon={<Plus className="h-4 w-4" />}
+                disabled={busy || !newName.trim()}
+                onClick={createClient}
+              >
                 Use this project
               </Button>
             </div>

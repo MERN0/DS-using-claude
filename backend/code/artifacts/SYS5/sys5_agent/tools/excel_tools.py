@@ -43,14 +43,13 @@ import os
 import re
 import uuid
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from langchain_core.tools import tool
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
-
 from sys5_agent.config import settings
 
 # ---------------------------------------------------------------------------
@@ -139,7 +138,7 @@ def _cell_str(value: Any) -> Any:
 _PATH_SEP_RE = re.compile(r"[\\/]")
 
 
-def _candidate_for(root: Path, raw: str) -> Optional[Path]:
+def _candidate_for(root: Path, raw: str) -> Path | None:
     candidate = Path(raw)
     candidate = candidate if candidate.is_absolute() else (root / candidate)
     candidate = candidate.resolve()
@@ -148,7 +147,7 @@ def _candidate_for(root: Path, raw: str) -> Optional[Path]:
     return candidate
 
 
-def _resolve_within(root: Path, file_name: str) -> Optional[Path]:
+def _resolve_within(root: Path, file_name: str) -> Path | None:
     """Resolve `file_name` against `root`, refusing to leave `root`.
 
     The tools below only ever hand the calling agent a bare file name (see
@@ -197,7 +196,7 @@ def _access_denied(file_name: str, root: Path) -> str:
 _SUPPORTED_READ_SUFFIXES = (".xlsx", ".xlsm")
 
 
-def _open_workbook(p: Path) -> tuple[Optional[Workbook], Optional[str]]:
+def _open_workbook(p: Path) -> tuple[Workbook | None, str | None]:
     """Open `p` read-only, or return `(None, <error JSON>)` instead of
     letting `openpyxl` raise straight out of a `@tool` function.
 
@@ -312,7 +311,7 @@ def build_read_only_tools(input_root: Path) -> list:
             wb.close()
 
     @tool
-    def preview_sheet(file_name: str, sheet_name: str, n_rows: Optional[int] = None) -> str:
+    def preview_sheet(file_name: str, sheet_name: str, n_rows: int | None = None) -> str:
         """Preview the first N raw rows of a sheet, keyed by column letter.
 
         Use this to classify an unknown sheet (is it the requirements sheet?
@@ -362,7 +361,7 @@ def build_read_only_tools(input_root: Path) -> list:
         sheet_name: str,
         start_row: int,
         end_row: int,
-        columns: Optional[list[str]] = None,
+        columns: list[str] | None = None,
     ) -> str:
         """Read a bounded range of rows from a sheet, keyed by column letter.
 
@@ -429,8 +428,7 @@ def build_read_only_tools(input_root: Path) -> list:
                     rows_out.append({"row": row_idx, "cells": cells})
 
             print(
-                f"[read_sheet_range] {p.name}::{sheet_name} rows {start_row}-{capped_end} "
-                f"of {max_row} total",
+                f"[read_sheet_range] {p.name}::{sheet_name} rows {start_row}-{capped_end} of {max_row} total",
                 flush=True,
             )
             return _dump(
@@ -451,9 +449,9 @@ def build_read_only_tools(input_root: Path) -> list:
         file_name: str,
         sheet_name: str,
         query: str,
-        columns: Optional[list[str]] = None,
+        columns: list[str] | None = None,
         regex: bool = False,
-        max_results: Optional[int] = None,
+        max_results: int | None = None,
     ) -> str:
         """Search a sheet for rows containing a query string, without reading it in full.
 
@@ -499,10 +497,14 @@ def build_read_only_tools(input_root: Path) -> list:
                     pattern = re.compile(query, re.IGNORECASE)
                 except re.error as e:
                     return _dump({"error": f"Invalid regex: {e}"})
-                matcher = lambda text: pattern.search(text) is not None
+
+                def matcher(text: str) -> bool:
+                    return pattern.search(text) is not None
             else:
                 needle = query.lower()
-                matcher = lambda text: needle in text.lower()
+
+                def matcher(text: str) -> bool:
+                    return needle in text.lower()
 
             matches = []
             truncated = False

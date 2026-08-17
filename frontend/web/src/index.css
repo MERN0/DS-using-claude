@@ -27,7 +27,7 @@
   --color-ink-900: #181824;
   --color-ink-950: #0e0e17;
 
-  --shadow-soft: 0 1px 2px rgba(24, 24, 36, 0.04), 0 8px 24px -8px rgba(24, 24, 36, 0.10);
+  --shadow-soft: 0 1px 2px rgba(24, 24, 36, 0.04), 0 8px 24px -8px rgba(24, 24, 36, 0.1);
   --shadow-pop: 0 4px 12px rgba(95, 46, 239, 0.18), 0 12px 32px -8px rgba(95, 46, 239, 0.22);
 }
 
@@ -42,9 +42,8 @@ html {
 body {
   margin: 0;
   background:
-    radial-gradient(1200px 600px at 90% -10%, rgba(112, 72, 255, 0.10), transparent 60%),
-    radial-gradient(900px 500px at -10% 10%, rgba(112, 72, 255, 0.07), transparent 55%),
-    #f7f7fb;
+    radial-gradient(1200px 600px at 90% -10%, rgba(112, 72, 255, 0.1), transparent 60%),
+    radial-gradient(900px 500px at -10% 10%, rgba(112, 72, 255, 0.07), transparent 55%), #f7f7fb;
   color: #23233a;
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
@@ -76,8 +75,13 @@ body {
 }
 
 @keyframes blink-dot {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.25; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
 }
 .live-dot {
   animation: blink-dot 1.4s ease-in-out infinite;

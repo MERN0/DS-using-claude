@@ -24,7 +24,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 # Internal modules are imported as `sys5_agent.*` (see agent/build.py,
@@ -39,8 +39,8 @@ _PACKAGE_PARENT = Path(__file__).resolve().parent.parent
 if str(_PACKAGE_PARENT) not in sys.path:
     sys.path.insert(0, str(_PACKAGE_PARENT))
 
-from sys5_agent.agent.runner import run_pipeline
-from sys5_agent.config import settings
+from sys5_agent.agent.runner import run_pipeline  # noqa: E402
+from sys5_agent.config import settings  # noqa: E402
 
 
 def parse_args(argv=None) -> argparse.Namespace:
@@ -117,7 +117,7 @@ def main(argv=None) -> int:
         # sandboxed to it -- see build_agent), so the default name uses our
         # own timestamp rather than the run workspace's (which doesn't
         # exist yet at this point).
-        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+        stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
         output_path = settings.OUTPUT_DIR / f"{args.client}_SYS5_{stamp}.xlsx"
     output_path = output_path.resolve()
 

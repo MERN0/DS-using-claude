@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from sys5_agent.agent import logsink
 from sys5_agent.agent.build import build_agent
@@ -103,8 +103,7 @@ def run_pipeline(
     pre_run_mtime = output_path.stat().st_mtime if output_path.exists() else None
 
     task_message = (
-        "\n".join(context_lines)
-        + "\n\nGenerate the SYS5 test case workbook for this run now, "
+        "\n".join(context_lines) + "\n\nGenerate the SYS5 test case workbook for this run now, "
         "following your system instructions."
     )
 
@@ -117,7 +116,7 @@ def run_pipeline(
     }
     summary_path = run_dir / "run_summary.json"
 
-    crash_message: Optional[str] = None
+    crash_message: str | None = None
     result: dict[str, Any] = {}
     next_message = task_message
     attempt = 0
@@ -159,7 +158,7 @@ def run_pipeline(
         )
         next_message = _CONTINUE_NUDGE
 
-    summary: Optional[dict] = None
+    summary: dict | None = None
     if summary_path.is_file():
         summary = json.loads(summary_path.read_text(encoding="utf-8"))
 

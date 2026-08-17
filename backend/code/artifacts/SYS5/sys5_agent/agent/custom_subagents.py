@@ -34,10 +34,9 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import yaml
-
 from sys5_agent.config import settings
 from sys5_agent.tools.excel_tools import build_read_only_tools
 
@@ -57,7 +56,7 @@ _CONTRACT_REMINDER = (
     "subagent actually confirmed, referenced by its alias, never a raw "
     "ID/address. If you write any Test Steps/Expected Result content, "
     "`SET` uses `=` and `VERIFY` uses `==` -- never a comma, never the "
-    "word \"to\"/\"is\"/\"equals\". Test Case ID is always assigned "
+    'word "to"/"is"/"equals". Test Case ID is always assigned '
     f"automatically as `{settings.TEST_CASE_ID_PREFIX}<n>` by "
     "write_output_workbook -- never assign one yourself. Persist detailed "
     "findings to a file in the run workspace and return only a short "
@@ -71,7 +70,7 @@ _CONTRACT_REMINDER = (
 FRONTMATTER_RE = re.compile(r"\A---\s*\n(.*?)\n---\s*\n?(.*)\Z", re.DOTALL)
 
 
-def _parse_subagent_file(path: Path) -> Optional[dict[str, Any]]:
+def _parse_subagent_file(path: Path) -> dict[str, Any] | None:
     """Parse one custom-subagent Markdown file.
 
     Returns None (after printing why) instead of raising for anything
@@ -175,8 +174,7 @@ def load_custom_subagents(client: str, input_root: Path, run_dir: Path) -> list[
         for skill_name in parsed["skill_names"]:
             if not (run_skills_dir / skill_name).is_dir():
                 print(
-                    f"[custom-subagents] {path.name}: skill '{skill_name}' isn't available this "
-                    "run -- dropping it",
+                    f"[custom-subagents] {path.name}: skill '{skill_name}' isn't available this run -- dropping it",
                     flush=True,
                 )
                 continue

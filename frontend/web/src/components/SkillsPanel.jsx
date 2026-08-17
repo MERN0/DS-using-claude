@@ -11,7 +11,9 @@ export default function SkillsPanel({ client, skills, domains }) {
   const toast = useToast();
 
   const refresh = () =>
-    api.listSkills(client).then((items) => setOverrides(Object.fromEntries(items.map((s) => [s.name, s.description]))));
+    api
+      .listSkills(client)
+      .then((items) => setOverrides(Object.fromEntries(items.map((s) => [s.name, s.description]))));
 
   useEffect(() => {
     setOverrides(null);
@@ -37,9 +39,8 @@ export default function SkillsPanel({ client, skills, domains }) {
           Available skills
         </SectionTitle>
         <p className="text-sm text-ink-500 mb-4">
-          Every skill a subagent can load. A project with no override for a skill runs on
-          the baseline version shown below &mdash; overriding one replaces it for this
-          project only.
+          Every skill a subagent can load. A project with no override for a skill runs on the baseline version
+          shown below &mdash; overriding one replaces it for this project only.
         </p>
         <div className="flex flex-col gap-2.5">
           {Object.entries(skills).map(([name, baseDesc]) => (
@@ -70,7 +71,19 @@ export default function SkillsPanel({ client, skills, domains }) {
   );
 }
 
-function SkillCard({ client, name, baseDesc, domains, isCustom, customDesc, expanded, onToggle, onChanged, onDeleted, onError }) {
+function SkillCard({
+  client,
+  name,
+  baseDesc,
+  domains,
+  isCustom,
+  customDesc,
+  expanded,
+  onToggle,
+  onChanged,
+  onDeleted,
+  onError,
+}) {
   const isDomainKnowledge = name === "domain-knowledge";
   const [mode, setMode] = useState("baseline"); // 'baseline' | 'edit'
   const [baseDomain, setBaseDomain] = useState("");
@@ -139,7 +152,9 @@ function SkillCard({ client, name, baseDesc, domains, isCustom, customDesc, expa
           </div>
           <p className="mt-0.5 text-xs text-ink-500 line-clamp-1">{isCustom ? customDesc : baseDesc}</p>
         </div>
-        <ChevronDown className={`h-4 w-4 shrink-0 text-ink-400 transition-transform mt-1 ${expanded ? "rotate-180" : ""}`} />
+        <ChevronDown
+          className={`h-4 w-4 shrink-0 text-ink-400 transition-transform mt-1 ${expanded ? "rotate-180" : ""}`}
+        />
       </button>
 
       <AnimatePresence initial={false}>
@@ -166,10 +181,14 @@ function SkillCard({ client, name, baseDesc, domains, isCustom, customDesc, expa
                       >
                         <option value="">Baseline for domain&hellip;</option>
                         {domains.map((d) => (
-                          <option key={d.key} value={d.key}>{d.label}</option>
+                          <option key={d.key} value={d.key}>
+                            {d.label}
+                          </option>
                         ))}
                       </Select>
-                      <span className="text-xs text-ink-400">domain-knowledge replaces, not adds to, the domain's own skill</span>
+                      <span className="text-xs text-ink-400">
+                        domain-knowledge replaces, not adds to, the domain's own skill
+                      </span>
                     </div>
                   )}
                   {baseline !== null && (
@@ -178,11 +197,23 @@ function SkillCard({ client, name, baseDesc, domains, isCustom, customDesc, expa
                     </pre>
                   )}
                   <div className="flex gap-2">
-                    <Button size="sm" tone="primary" icon={busy ? <Spinner className="h-3.5 w-3.5" /> : <Pencil className="h-3.5 w-3.5" />} disabled={busy} onClick={startEdit}>
+                    <Button
+                      size="sm"
+                      tone="primary"
+                      icon={busy ? <Spinner className="h-3.5 w-3.5" /> : <Pencil className="h-3.5 w-3.5" />}
+                      disabled={busy}
+                      onClick={startEdit}
+                    >
                       {isCustom ? "Edit override" : "Create override"}
                     </Button>
                     {isCustom && (
-                      <Button size="sm" tone="danger" icon={<Trash2 className="h-3.5 w-3.5" />} disabled={busy} onClick={remove}>
+                      <Button
+                        size="sm"
+                        tone="danger"
+                        icon={<Trash2 className="h-3.5 w-3.5" />}
+                        disabled={busy}
+                        onClick={remove}
+                      >
                         Remove override
                       </Button>
                     )}
@@ -205,10 +236,20 @@ function SkillCard({ client, name, baseDesc, domains, isCustom, customDesc, expa
                     className="mb-3"
                   />
                   <div className="flex gap-2">
-                    <Button size="sm" tone="primary" icon={busy ? <Spinner className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />} disabled={busy} onClick={save}>
+                    <Button
+                      size="sm"
+                      tone="primary"
+                      icon={busy ? <Spinner className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
+                      disabled={busy}
+                      onClick={save}
+                    >
                       Save override
                     </Button>
-                    <Button size="sm" icon={<X className="h-3.5 w-3.5" />} onClick={() => setMode("baseline")}>
+                    <Button
+                      size="sm"
+                      icon={<X className="h-3.5 w-3.5" />}
+                      onClick={() => setMode("baseline")}
+                    >
                       Cancel
                     </Button>
                   </div>

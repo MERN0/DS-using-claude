@@ -21,12 +21,12 @@ set last.
 
 from __future__ import annotations
 
-from typing import Callable, Optional
+from collections.abc import Callable
 
-_sink: Optional[Callable[[str], None]] = None
+_sink: Callable[[str], None] | None = None
 
 
-def set_sink(sink: Optional[Callable[[str], None]]) -> None:
+def set_sink(sink: Callable[[str], None] | None) -> None:
     global _sink
     _sink = sink
 

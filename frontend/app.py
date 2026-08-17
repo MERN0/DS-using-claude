@@ -31,7 +31,7 @@ import sys
 import threading
 import uuid
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 _FRONTEND_DIR = Path(__file__).resolve().parent
 # This file lives in frontend/ at the repo root, a sibling of backend/ --
@@ -43,12 +43,11 @@ _SYS5_DIR = _REPO_ROOT / "backend" / "code" / "artifacts" / "SYS5"
 if str(_SYS5_DIR) not in sys.path:
     sys.path.insert(0, str(_SYS5_DIR))
 
+import builders as b  # noqa: E402
 from fastapi import FastAPI, File, HTTPException, UploadFile  # noqa: E402
 from fastapi.responses import FileResponse  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
-
-import builders as b  # noqa: E402
 from sys5 import sys5 as run_sys5  # noqa: E402
 from sys5_agent.agent import logsink  # noqa: E402
 from sys5_agent.config import settings  # noqa: E402
@@ -158,7 +157,7 @@ def api_list_skills(client: str):
 
 
 @app.get("/api/skills/{name}/baseline")
-def api_skill_baseline(name: str, base_domain: Optional[str] = None):
+def api_skill_baseline(name: str, base_domain: str | None = None):
     """The current baseline skill (same for every client that hasn't
     overridden it) -- read-only reference, independent of any client, so the
     UI can show "what's already active" for a skill even for a client that
@@ -168,7 +167,7 @@ def api_skill_baseline(name: str, base_domain: Optional[str] = None):
 
 
 @app.get("/api/clients/{client}/skills/{name}")
-def api_get_skill(client: str, name: str, base_domain: Optional[str] = None):
+def api_get_skill(client: str, name: str, base_domain: str | None = None):
     """Returns the client's existing override if it has one; otherwise a
     starting point to edit (the current baseline skill, or -- for
     domain-knowledge, which needs `base_domain` -- that domain's current

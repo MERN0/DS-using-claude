@@ -17,7 +17,6 @@ from __future__ import annotations
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
 # This file lives in frontend/ at the repo root, a sibling of backend/ --
 # not nested under the SYS5 package -- so the path to sys5_agent has to be
@@ -28,7 +27,6 @@ if str(_SYS5_DIR) not in sys.path:
     sys.path.insert(0, str(_SYS5_DIR))
 
 import yaml  # noqa: E402
-
 from sys5_agent.agent.custom_subagents import FRONTMATTER_RE  # noqa: E402
 from sys5_agent.agent.subagents import build_subagents  # noqa: E402
 from sys5_agent.config import settings  # noqa: E402
@@ -85,17 +83,13 @@ OVERRIDABLE_SKILLS: dict[str, str] = {
         "SET/WAIT/VERIFY (=/==) syntax used when drafting test cases."
     ),
     "output-format": (
-        "The canonical definition of all 13 output columns and what "
-        "counts as a structurally complete row."
+        "The canonical definition of all 13 output columns and what counts as a structurally complete row."
     ),
     "resolution-playbook": (
         "How to search the client's supporting documents (signal list, "
         "command list, etc.) for exact signal/command names."
     ),
-    "merging-strategy": (
-        "How to decide which requirements collapse into one test case "
-        "versus stay separate."
-    ),
+    "merging-strategy": ("How to decide which requirements collapse into one test case versus stay separate."),
     "domain-knowledge": (
         "This client's automotive domain knowledge (ECUs, signal/command "
         "naming, common patterns). Careful: this REPLACES the standard "
@@ -130,9 +124,7 @@ def list_clients() -> list[str]:
     if not settings.CLIENTS_DIR.is_dir():
         return []
     return sorted(
-        p.name
-        for p in settings.CLIENTS_DIR.iterdir()
-        if p.is_dir() and p.name != settings.DEFAULT_CLIENT_DIR_NAME
+        p.name for p in settings.CLIENTS_DIR.iterdir() if p.is_dir() and p.name != settings.DEFAULT_CLIENT_DIR_NAME
     )
 
 
@@ -193,7 +185,7 @@ def list_client_skill_overrides(client: str) -> list[str]:
     return sorted(p.name for p in skills_dir.iterdir() if p.is_dir() and (p / "SKILL.md").is_file())
 
 
-def _skill_source_dir(skill_name: str, base_domain: Optional[str] = None) -> Optional[Path]:
+def _skill_source_dir(skill_name: str, base_domain: str | None = None) -> Path | None:
     """Where to read a *starting point* for a new override from -- the
     current baseline skill, or (for domain-knowledge) a chosen domain's
     current skill. Returns None if there's nothing to start from."""
@@ -204,7 +196,7 @@ def _skill_source_dir(skill_name: str, base_domain: Optional[str] = None) -> Opt
     return settings.default_client_dir() / "skills" / skill_name
 
 
-def read_skill_starting_point(skill_name: str, base_domain: Optional[str] = None) -> tuple[str, str]:
+def read_skill_starting_point(skill_name: str, base_domain: str | None = None) -> tuple[str, str]:
     """(description, body) to pre-fill the editor with -- from the current
     default/domain skill. Returns ("", "") if there's nothing to start
     from (e.g. domain-knowledge with no base_domain chosen yet)."""
@@ -230,7 +222,7 @@ def _parse_skill_file(path: Path) -> tuple[str, str]:
     return description, match.group(2).strip()
 
 
-def read_client_skill_override(client: str, skill_name: str) -> Optional[tuple[str, str]]:
+def read_client_skill_override(client: str, skill_name: str) -> tuple[str, str] | None:
     """(description, body) for this client's existing override, or None if
     it doesn't have one yet."""
     path = settings.client_dir(client) / "skills" / skill_name / "SKILL.md"
@@ -242,13 +234,14 @@ def read_client_skill_override(client: str, skill_name: str) -> Optional[tuple[s
 def write_skill_override(client: str, skill_name: str, description: str, body: str) -> Path:
     if skill_name not in OVERRIDABLE_SKILLS:
         raise ValidationError(
-            f"'{skill_name}' isn't a skill any subagent actually loads -- "
-            f"choose one of: {sorted(OVERRIDABLE_SKILLS)}."
+            f"'{skill_name}' isn't a skill any subagent actually loads -- choose one of: {sorted(OVERRIDABLE_SKILLS)}."
         )
     description = description.strip()
     body = body.strip()
     if not description:
-        raise ValidationError("A skill needs a one-sentence description (this is what tells the model when to read it).")
+        raise ValidationError(
+            "A skill needs a one-sentence description (this is what tells the model when to read it)."
+        )
     if not body:
         raise ValidationError("A skill needs some actual instructions in its body.")
 
@@ -305,7 +298,7 @@ def list_custom_subagents(client: str) -> list[dict]:
     return out
 
 
-def _read_subagent_file(path: Path) -> Optional[SubagentDraft]:
+def _read_subagent_file(path: Path) -> SubagentDraft | None:
     text = path.read_text(encoding="utf-8")
     match = FRONTMATTER_RE.match(text)
     if not match:
@@ -330,7 +323,7 @@ def _read_subagent_file(path: Path) -> Optional[SubagentDraft]:
     )
 
 
-def read_custom_subagent(client: str, name: str) -> Optional[SubagentDraft]:
+def read_custom_subagent(client: str, name: str) -> SubagentDraft | None:
     path = settings.client_dir(client) / "subagents" / f"{name}.md"
     if not path.is_file():
         return None

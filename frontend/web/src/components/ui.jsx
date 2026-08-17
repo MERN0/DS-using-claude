@@ -37,7 +37,9 @@ export function Badge({ children, tone = "neutral" }) {
     danger: "bg-rose-100 text-rose-700",
   };
   return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium ${tones[tone]}`}>
+    <span
+      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium ${tones[tone]}`}
+    >
       {children}
     </span>
   );

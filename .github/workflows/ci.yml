@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main, with_fe]
+  pull_request:
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install ruff
+        run: pip install ruff
+      - name: ruff format --check
+        run: ruff format --check .
+      - name: ruff check
+        run: ruff check .
+      - name: Install pipeline + frontend dependencies
+        run: |
+          pip install -r backend/code/artifacts/SYS5/sys5_agent/requirements.txt
+          pip install -r frontend/requirements.txt
+      - name: Run frontend backend regression suite
+        working-directory: frontend
+        run: python test_app.py
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run build

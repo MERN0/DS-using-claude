@@ -1,6 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { UploadCloud, PlayCircle, Download, FileSpreadsheet, CheckCircle2, XCircle, Terminal } from "lucide-react";
+import {
+  UploadCloud,
+  PlayCircle,
+  Download,
+  FileSpreadsheet,
+  CheckCircle2,
+  XCircle,
+  Terminal,
+} from "lucide-react";
 import { Card, CardBody, SectionTitle, Button, Input, Select, Spinner, Badge } from "./ui.jsx";
 import { api } from "../api.js";
 import { useToast } from "./Toast.jsx";
@@ -97,14 +105,18 @@ export default function GeneratePanel({ client, domains, outputFormats }) {
             <Field label="Domain">
               <Select value={domain} onChange={(e) => setDomain(e.target.value)} className="w-full">
                 {domains.map((d) => (
-                  <option key={d.key} value={d.key}>{d.label}</option>
+                  <option key={d.key} value={d.key}>
+                    {d.label}
+                  </option>
                 ))}
               </Select>
             </Field>
             <Field label="Output format">
               <Select value={format} onChange={(e) => setFormat(e.target.value)} className="w-full">
                 {outputFormats.map((f) => (
-                  <option key={f} value={f}>{f}</option>
+                  <option key={f} value={f}>
+                    {f}
+                  </option>
                 ))}
               </Select>
             </Field>
@@ -122,8 +134,8 @@ export default function GeneratePanel({ client, domains, outputFormats }) {
         <CardBody>
           <SectionTitle icon={<StepBadge n={2} />}>Input files</SectionTitle>
           <p className="text-sm text-ink-500 mb-3">
-            Upload the SYS2 requirements workbook plus any supporting workbooks (signal
-            list, command list, application parameters, communication matrix).
+            Upload the SYS2 requirements workbook plus any supporting workbooks (signal list, command list,
+            application parameters, communication matrix).
           </p>
           <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-ink-200 bg-ink-50/50 px-4 py-8 text-center transition hover:border-brand-300 hover:bg-brand-50/40">
             <UploadCloud className="h-7 w-7 text-ink-400" />
@@ -139,7 +151,13 @@ export default function GeneratePanel({ client, domains, outputFormats }) {
             />
           </label>
           <div className="mt-3 flex items-center gap-2.5">
-            <Button tone="primary" size="sm" icon={uploading ? <Spinner className="h-3.5 w-3.5" /> : <UploadCloud className="h-3.5 w-3.5" />} disabled={uploading || !files.length} onClick={doUpload}>
+            <Button
+              tone="primary"
+              size="sm"
+              icon={uploading ? <Spinner className="h-3.5 w-3.5" /> : <UploadCloud className="h-3.5 w-3.5" />}
+              disabled={uploading || !files.length}
+              onClick={doUpload}
+            >
               Upload
             </Button>
             {uploadId && <Badge tone="success">{uploadedNames.length} file(s) uploaded</Badge>}
@@ -147,16 +165,32 @@ export default function GeneratePanel({ client, domains, outputFormats }) {
 
           <AnimatePresence>
             {uploadedNames.length > 0 && (
-              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="mt-3.5">
-                <label className="mb-1 block text-xs font-medium text-ink-500">Which uploaded file is the requirements workbook?</label>
-                <Select value={reqFile} onChange={(e) => setReqFile(e.target.value)} className="max-w-md w-full">
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                className="mt-3.5"
+              >
+                <label className="mb-1 block text-xs font-medium text-ink-500">
+                  Which uploaded file is the requirements workbook?
+                </label>
+                <Select
+                  value={reqFile}
+                  onChange={(e) => setReqFile(e.target.value)}
+                  className="max-w-md w-full"
+                >
                   {uploadedNames.map((n) => (
-                    <option key={n} value={n}>{n}</option>
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
                   ))}
                 </Select>
                 <ul className="mt-2 flex flex-wrap gap-1.5">
                   {uploadedNames.map((n) => (
-                    <li key={n} className="flex items-center gap-1 rounded-md bg-ink-100 px-2 py-1 text-[11px] text-ink-600">
+                    <li
+                      key={n}
+                      className="flex items-center gap-1 rounded-md bg-ink-100 px-2 py-1 text-[11px] text-ink-600"
+                    >
                       <FileSpreadsheet className="h-3 w-3" /> {n}
                     </li>
                   ))}
@@ -198,13 +232,20 @@ export default function GeneratePanel({ client, domains, outputFormats }) {
 
           {job.summary && (
             <p className="mt-2 text-xs text-ink-500">
-              {Object.entries(job.summary).map(([k, v]) => `${k.replace(/_/g, " ")}: ${v}`).join(" · ")}
+              {Object.entries(job.summary)
+                .map(([k, v]) => `${k.replace(/_/g, " ")}: ${v}`)
+                .join(" · ")}
             </p>
           )}
 
           <AnimatePresence>
             {job.log.length > 0 && (
-              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="mt-4">
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                className="mt-4"
+              >
                 <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-ink-400">
                   <Terminal className="h-3.5 w-3.5" /> Live progress
                   {running && <span className="live-dot h-1.5 w-1.5 rounded-full bg-emerald-400" />}
@@ -236,7 +277,11 @@ function Field({ label, children }) {
 function StatusPill({ status, error }) {
   if (status === "idle") return null;
   if (status === "starting" || status === "running") {
-    return <span className="text-sm text-ink-500">{status === "starting" ? "Starting…" : "Running… this can take several minutes."}</span>;
+    return (
+      <span className="text-sm text-ink-500">
+        {status === "starting" ? "Starting…" : "Running… this can take several minutes."}
+      </span>
+    );
   }
   if (status === "done") {
     return (

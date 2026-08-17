@@ -78,12 +78,15 @@ export default function SubagentsPanel({ client, builtIn, tools, skills }) {
             Built-in subagents
           </SectionTitle>
           <p className="text-sm text-ink-500 mb-4">
-            The six specialists every run already delegates to, in order. Custom subagents
-            below are purely additive to these, never a replacement.
+            The six specialists every run already delegates to, in order. Custom subagents below are purely
+            additive to these, never a replacement.
           </p>
           <div className="grid gap-2.5 sm:grid-cols-2">
             {builtIn.map((s, i) => (
-              <div key={s.name} className="flex items-start gap-2.5 rounded-xl border border-ink-100 bg-ink-50/50 px-3.5 py-3">
+              <div
+                key={s.name}
+                className="flex items-start gap-2.5 rounded-xl border border-ink-100 bg-ink-50/50 px-3.5 py-3"
+              >
                 <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-500 text-[11px] font-semibold text-white mt-0.5">
                   {i + 1}
                 </span>
@@ -125,10 +128,19 @@ export default function SubagentsPanel({ client, builtIn, tools, skills }) {
                       <p className="text-xs text-ink-500 line-clamp-1">{s.description}</p>
                     </div>
                     <div className="flex shrink-0 gap-1.5">
-                      <Button size="sm" icon={<Pencil className="h-3.5 w-3.5" />} onClick={() => edit(s.name)}>
+                      <Button
+                        size="sm"
+                        icon={<Pencil className="h-3.5 w-3.5" />}
+                        onClick={() => edit(s.name)}
+                      >
                         Edit
                       </Button>
-                      <Button size="sm" tone="danger" icon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => remove(s.name)} />
+                      <Button
+                        size="sm"
+                        tone="danger"
+                        icon={<Trash2 className="h-3.5 w-3.5" />}
+                        onClick={() => remove(s.name)}
+                      />
                     </div>
                   </motion.div>
                 ))}
@@ -144,8 +156,8 @@ export default function SubagentsPanel({ client, builtIn, tools, skills }) {
             {editingExisting ? `Editing "${form.name}"` : "Add a subagent"}
           </SectionTitle>
           <p className="text-sm text-ink-500 mb-3">
-            A specialist the orchestrator can delegate a job to, alongside the six above &mdash;
-            purely additive, never a replacement for the standard pipeline.
+            A specialist the orchestrator can delegate a job to, alongside the six above &mdash; purely
+            additive, never a replacement for the standard pipeline.
           </p>
           <Input
             value={form.name}
@@ -172,7 +184,13 @@ export default function SubagentsPanel({ client, builtIn, tools, skills }) {
             <div className="mb-1.5 text-xs font-medium text-ink-500">Tools it can use</div>
             <div className="flex flex-wrap gap-2">
               {Object.keys(tools).map((t) => (
-                <Chip key={t} label={t} title={tools[t]} active={form.tools.includes(t)} onClick={() => toggle("tools", t)} />
+                <Chip
+                  key={t}
+                  label={t}
+                  title={tools[t]}
+                  active={form.tools.includes(t)}
+                  onClick={() => toggle("tools", t)}
+                />
               ))}
             </div>
           </div>
@@ -180,13 +198,24 @@ export default function SubagentsPanel({ client, builtIn, tools, skills }) {
             <div className="mb-1.5 text-xs font-medium text-ink-500">Skills it has access to</div>
             <div className="flex flex-wrap gap-2">
               {Object.keys(skills).map((s) => (
-                <Chip key={s} label={s} title={skills[s]} active={form.skills.includes(s)} onClick={() => toggle("skills", s)} />
+                <Chip
+                  key={s}
+                  label={s}
+                  title={skills[s]}
+                  active={form.skills.includes(s)}
+                  onClick={() => toggle("skills", s)}
+                />
               ))}
             </div>
           </div>
 
           <div className="flex gap-2">
-            <Button tone="primary" icon={busy ? <Spinner className="h-4 w-4" /> : <Save className="h-4 w-4" />} disabled={busy} onClick={save}>
+            <Button
+              tone="primary"
+              icon={busy ? <Spinner className="h-4 w-4" /> : <Save className="h-4 w-4" />}
+              disabled={busy}
+              onClick={save}
+            >
               Save
             </Button>
             <Button
