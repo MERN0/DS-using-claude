@@ -17,17 +17,27 @@ there (clients, skills, memory, subagents, the pipeline itself).
 **Configure a client** — three kinds of customization, each validated
 against exactly what the pipeline expects (unknown tool/skill name,
 missing required field, unsafe name — all rejected with an explanation
-before anything is written):
+before anything is written). Every panel shows two layers: what's already
+active for every client (read-only reference) and what this client adds on
+top (editable) — a fresh client's editable box being empty doesn't mean
+"nothing is configured", and the read-only layer makes that visible instead
+of leaving the user to guess:
 
-- **Memory rules** (`clients/<name>/memory/AGENTS.md`) — a standing
-  instruction always in effect for that client.
-- **Skill overrides** (`clients/<name>/skills/<skill>/SKILL.md`) — replace
-  one of the four baseline skills (or the domain-knowledge skill) with the
+- **Memory rules** (`clients/<name>/memory/AGENTS.md`) — the Memory tab
+  shows the baseline rules every run already loads (collapsible, read-only)
+  above the client's own standing instruction, which is *appended* to the
+  baseline at run time, never a replacement for it (see `agent/build.py`'s
+  `_write_layered_memory`).
+- **Skill overrides** (`clients/<name>/skills/<skill>/SKILL.md`) — the
+  Skills tab lists all five overridable skills with a "Baseline" or "Custom
+  override" badge and a "View baseline" button per skill, so the current
+  baseline body is always one click away, then a form to add/replace this
   client's own version.
-- **Custom subagents** (`clients/<name>/subagents/<name>.md`) — an
-  additional specialist the orchestrator can delegate to for that client,
-  alongside the fixed six the pipeline always runs. Never a replacement
-  for the six-phase pipeline, only an addition to it.
+- **Custom subagents** (`clients/<name>/subagents/<name>.md`) — the
+  Subagents tab lists the fixed six subagents the pipeline always runs
+  first (read-only reference, from `agent/subagents.py`), then this
+  client's additional specialists. Custom subagents are never a
+  replacement for the six-phase pipeline, only an addition to it.
 
 **Run a real generation** — upload the SYS2 requirements workbook plus any
 supporting documents, pick the domain/output format/version, and click
@@ -93,9 +103,9 @@ skills/subagents) works fine without one; only clicking Generate needs it.
   excel_tools` — rather than duplicating any of it. No FastAPI dependency,
   so it's testable on its own.
 - `templates/index.html` + `static/app.js` + `static/style.css` —
-  Bootstrap 5 (via CDN) for styling; vanilla JS handling the four panels
-  (memory / skills / subagents / generate) and polling job status during
-  a run.
+  Bootstrap 5 + Bootstrap Icons (via CDN) for styling; vanilla JS handling
+  the four panels (memory / skills / subagents / generate), rendering the
+  read-only baseline reference views, and polling job status during a run.
 - `test_app.py` — end-to-end regression test against a scratch `clients/`
   directory and a mocked `sys5()` (no real LLM needed) covering the CRUD
   endpoints, the upload → generate → poll → download lifecycle, and the

@@ -83,6 +83,8 @@ def api_config():
         "clients": b.list_clients(),
         "tools": b.available_tools(),
         "skills": b.OVERRIDABLE_SKILLS,
+        "built_in_subagents": b.built_in_subagents(),
+        "baseline_memory": b.read_baseline_memory(),
     }
 
 
@@ -154,6 +156,16 @@ def api_list_skills(client: str):
         existing = b.read_client_skill_override(client, name)
         out.append({"name": name, "description": existing[0] if existing else ""})
     return out
+
+
+@app.get("/api/skills/{name}/baseline")
+def api_skill_baseline(name: str, base_domain: Optional[str] = None):
+    """The current baseline skill (same for every client that hasn't
+    overridden it) -- read-only reference, independent of any client, so the
+    UI can show "what's already active" for a skill even for a client that
+    has no override of its own yet."""
+    desc, body = b.read_skill_starting_point(name, base_domain)
+    return {"description": desc, "body": body}
 
 
 @app.get("/api/clients/{client}/skills/{name}")

@@ -30,6 +30,7 @@ if str(_SYS5_DIR) not in sys.path:
 import yaml  # noqa: E402
 
 from sys5_agent.agent.custom_subagents import FRONTMATTER_RE  # noqa: E402
+from sys5_agent.agent.subagents import build_subagents  # noqa: E402
 from sys5_agent.config import settings  # noqa: E402
 from sys5_agent.tools.excel_tools import build_read_only_tools  # noqa: E402
 
@@ -60,6 +61,17 @@ def available_tools() -> dict[str, str]:
     are read."""
     tools = build_read_only_tools(Path("/__ui_reference_only__"))
     return {t.name: _first_sentence(t.description) for t in tools}
+
+
+def built_in_subagents() -> list[dict]:
+    """[{"name", "description"}, ...] for the six fixed subagents every run
+    always includes (see `agent/subagents.py`) -- shown to the user as
+    read-only reference so a custom subagent isn't a mystery addition to an
+    invisible pipeline. The path doesn't need to exist, same as
+    `available_tools()`: only names/descriptions are read, no file access
+    happens at construction time."""
+    subagents = build_subagents(Path("/__ui_reference_only__"))
+    return [{"name": s["name"], "description": s["description"]} for s in subagents]
 
 
 # The four baseline skills every run loads, plus a client-scoped override of
@@ -127,6 +139,16 @@ def list_clients() -> list[str]:
 # ---------------------------------------------------------------------------
 # Memory (clients/<name>/memory/AGENTS.md)
 # ---------------------------------------------------------------------------
+
+
+def read_baseline_memory() -> str:
+    """The standing rules every run already loads before any client-specific
+    addition (`clients/_default/memory/AGENTS.md`) -- read-only reference so
+    the dashboard's (empty-by-default) client memory box isn't mistaken for
+    "no rules exist yet"; see `agent/build.py`'s `_write_layered_memory`,
+    which concatenates this with the client's own file, never replaces it."""
+    path = settings.default_client_dir() / "memory" / "AGENTS.md"
+    return path.read_text(encoding="utf-8") if path.is_file() else ""
 
 
 def read_client_memory(client: str) -> str:

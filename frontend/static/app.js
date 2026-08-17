@@ -2,6 +2,13 @@
 // four panels (memory / skills / subagents / generate) purely through the
 // REST endpoints in app.py. No server-side conversation state -- every
 // request below carries `currentClient` itself.
+//
+// Each panel shows two layers on purpose: what's already active for every
+// client (baseline memory rules, baseline skill bodies, the six built-in
+// subagents -- all read-only reference, fetched once and/or per skill) and
+// what this specific client adds on top (editable). Before this, the UI
+// only ever showed the second layer, which is empty for a fresh client and
+// easy to mistake for "nothing is configured yet".
 
 let config = null;
 let currentClient = null;
@@ -36,6 +43,12 @@ function setStatus(id, text, kind) {
   el.className = "small mt-2" + (kind ? ` text-${kind}` : "");
 }
 
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[c]));
+}
+
 // ---------------------------------------------------------------------------
 // Boot / client selection
 // ---------------------------------------------------------------------------
@@ -59,6 +72,13 @@ async function boot() {
     if (!name) return;
     try {
       await api("POST", "/api/clients", { name });
+      if (!config.clients.includes(name)) {
+        config.clients.push(name);
+        const opt = document.createElement("option");
+        opt.value = name;
+        opt.textContent = name;
+        clientSelect.appendChild(opt);
+      }
       selectClient(name);
     } catch (e) {
       setStatus("clientStatus", e.message, "danger");
@@ -80,6 +100,10 @@ async function boot() {
   renderCheckboxGroup($("subagentTools"), "tool", config.tools);
   renderCheckboxGroup($("subagentSkills"), "skill", config.skills);
 
+  // Client-independent reference data: fetched once, never changes per client.
+  $("baselineMemoryText").textContent = config.baseline_memory || "(no baseline rules file found)";
+  renderBuiltInSubagents();
+
   setupTabs();
   setupMemory();
   setupSkills();
@@ -100,7 +124,7 @@ function renderCheckboxGroup(container, prefix, itemsWithDescriptions) {
   container.innerHTML = "";
   for (const [name, desc] of Object.entries(itemsWithDescriptions)) {
     const wrap = document.createElement("div");
-    wrap.className = "form-check";
+    wrap.className = "form-check chip-check";
     wrap.title = desc;
     wrap.innerHTML = `
       <input class="form-check-input" type="checkbox" value="${name}" id="${prefix}-${name}">
@@ -111,14 +135,26 @@ function renderCheckboxGroup(container, prefix, itemsWithDescriptions) {
 
 function selectClient(name) {
   currentClient = name;
-  $("clientSelect").value = config.clients.includes(name) ? name : "";
+  clientSelectSync(name);
   $("newClientName").value = "";
   setStatus("clientStatus", `Working on "${name}".`, "muted");
   $("workArea").classList.remove("d-none");
   loadMemory();
-  loadSkills();
+  renderSkillGallery();
+  clearSkillForm();
   loadSubagents();
   updateGenerateReadiness();
+}
+
+function clientSelectSync(name) {
+  const select = $("clientSelect");
+  if (![...select.options].some((o) => o.value === name)) {
+    const opt = document.createElement("option");
+    opt.value = name;
+    opt.textContent = name;
+    select.appendChild(opt);
+  }
+  select.value = name;
 }
 
 // ---------------------------------------------------------------------------
@@ -155,12 +191,20 @@ function setupMemory() {
     $("memoryText").value = "";
     setStatus("memoryStatus", "Deleted.", "muted");
   });
+  $("toggleBaselineMemoryBtn").addEventListener("click", () => {
+    const box = $("baselineMemoryText");
+    const btn = $("toggleBaselineMemoryBtn");
+    const nowHidden = box.classList.toggle("d-none");
+    btn.innerHTML = nowHidden
+      ? '<i class="bi bi-eye"></i> Show baseline rules'
+      : '<i class="bi bi-eye-slash"></i> Hide baseline rules';
+  });
 }
 
 async function loadMemory() {
   const data = await api("GET", `/api/clients/${currentClient}/memory`);
   $("memoryText").value = data.text;
-  setStatus("memoryStatus", "", "");
+  setStatus("memoryStatus", data.text ? "This client has its own addition below." : "No addition yet -- baseline rules only.", "muted");
 }
 
 // ---------------------------------------------------------------------------
@@ -177,7 +221,7 @@ function setupSkills() {
         body: $("skillBody").value,
       });
       setStatus("skillStatus", `Saved "${name}".`, "success");
-      loadSkills();
+      renderSkillGallery();
     } catch (e) {
       setStatus("skillStatus", e.message, "danger");
     }
@@ -210,41 +254,105 @@ async function onSkillPicked() {
   const data = await api("GET", `/api/clients/${currentClient}/skills/${name}${qs}`);
   $("skillDescription").value = data.description;
   $("skillBody").value = data.body;
+  document.querySelector('.nav-link[data-tab="skills"]').scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
-async function loadSkills() {
-  const items = await api("GET", `/api/clients/${currentClient}/skills`);
-  const list = $("skillList");
-  list.innerHTML = "";
-  $("skillListEmpty").classList.toggle("d-none", items.length > 0);
-  for (const item of items) {
+async function renderSkillGallery() {
+  const overrides = await api("GET", `/api/clients/${currentClient}/skills`); // [{name, description}]
+  const overrideByName = Object.fromEntries(overrides.map((o) => [o.name, o.description]));
+
+  const gallery = $("skillGallery");
+  gallery.innerHTML = "";
+  for (const [name, baseDesc] of Object.entries(config.skills)) {
+    const isCustom = Object.prototype.hasOwnProperty.call(overrideByName, name);
     const row = document.createElement("div");
-    row.className = "list-group-item d-flex justify-content-between align-items-center";
+    row.className = "skill-card";
     row.innerHTML = `
-      <div><strong>${item.name}</strong><div class="text-muted small">${item.description}</div></div>
-      <div class="d-flex gap-2">
-        <button class="btn btn-sm btn-outline-secondary" data-edit="${item.name}">Edit</button>
-        <button class="btn btn-sm btn-outline-danger" data-delete="${item.name}">Delete</button>
-      </div>`;
-    list.appendChild(row);
+      <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+        <div>
+          <div class="d-flex align-items-center gap-2 flex-wrap">
+            <strong>${escapeHtml(name)}</strong>
+            <span class="badge ${isCustom ? "text-bg-success" : "text-bg-secondary"} fw-normal">
+              ${isCustom ? "Custom override" : "Baseline"}
+            </span>
+          </div>
+          <div class="text-muted small">${escapeHtml(isCustom ? overrideByName[name] : baseDesc)}</div>
+        </div>
+        <div class="d-flex gap-2 flex-wrap align-items-center">
+          ${name === "domain-knowledge" ? `
+            <select class="form-select form-select-sm skill-baseline-domain" style="max-width:190px;" data-skill="${name}">
+              <option value="">Baseline for domain&hellip;</option>
+              ${config.domains.map((d) => `<option value="${d.key}">${escapeHtml(d.label)}</option>`).join("")}
+            </select>` : `
+            <button class="btn btn-sm btn-outline-secondary" data-baseline="${name}">
+              <i class="bi bi-eye"></i> View baseline</button>`}
+          <button class="btn btn-sm btn-outline-primary" data-edit="${name}">
+            <i class="bi bi-pencil"></i> ${isCustom ? "Edit" : "Override"}</button>
+          ${isCustom ? `<button class="btn btn-sm btn-outline-danger" data-delete="${name}"><i class="bi bi-trash"></i></button>` : ""}
+        </div>
+      </div>
+      <pre class="baseline-box mt-2 d-none" data-baseline-box="${name}"></pre>`;
+    gallery.appendChild(row);
   }
-  list.querySelectorAll("[data-edit]").forEach((btn) =>
+
+  gallery.querySelectorAll("[data-baseline]").forEach((btn) =>
+    btn.addEventListener("click", () => toggleSkillBaseline(btn.dataset.baseline))
+  );
+  gallery.querySelectorAll(".skill-baseline-domain").forEach((sel) =>
+    sel.addEventListener("change", () => {
+      if (sel.value) showSkillBaseline(sel.dataset.skill, sel.value);
+    })
+  );
+  gallery.querySelectorAll("[data-edit]").forEach((btn) =>
     btn.addEventListener("click", async () => {
       $("skillNameSelect").value = btn.dataset.edit;
       await onSkillPicked();
     })
   );
-  list.querySelectorAll("[data-delete]").forEach((btn) =>
+  gallery.querySelectorAll("[data-delete]").forEach((btn) =>
     btn.addEventListener("click", async () => {
       await api("DELETE", `/api/clients/${currentClient}/skills/${btn.dataset.delete}`);
-      loadSkills();
+      renderSkillGallery();
     })
   );
+}
+
+async function toggleSkillBaseline(name, baseDomain) {
+  const box = document.querySelector(`[data-baseline-box="${name}"]`);
+  if (!box.classList.contains("d-none") && !baseDomain) {
+    box.classList.add("d-none");
+    return;
+  }
+  await showSkillBaseline(name, baseDomain);
+}
+
+async function showSkillBaseline(name, baseDomain) {
+  const box = document.querySelector(`[data-baseline-box="${name}"]`);
+  const qs = baseDomain ? `?base_domain=${encodeURIComponent(baseDomain)}` : "";
+  const data = await api("GET", `/api/skills/${name}/baseline${qs}`);
+  box.textContent = data.body || "(nothing to show yet)";
+  box.classList.remove("d-none");
 }
 
 // ---------------------------------------------------------------------------
 // Subagents
 // ---------------------------------------------------------------------------
+
+function renderBuiltInSubagents() {
+  const list = $("builtInSubagentList");
+  list.innerHTML = "";
+  (config.built_in_subagents || []).forEach((s, i) => {
+    const row = document.createElement("div");
+    row.className = "built-in-subagent-card";
+    row.innerHTML = `
+      <span class="step-badge step-badge-sm">${i + 1}</span>
+      <div>
+        <strong>${escapeHtml(s.name)}</strong>
+        <div class="text-muted small">${escapeHtml(s.description)}</div>
+      </div>`;
+    list.appendChild(row);
+  });
+}
 
 function setupSubagents() {
   $("saveSubagentBtn").addEventListener("click", async () => {
@@ -296,10 +404,12 @@ async function loadSubagents() {
     const row = document.createElement("div");
     row.className = "list-group-item d-flex justify-content-between align-items-center";
     row.innerHTML = `
-      <div><strong>${item.name}</strong><div class="text-muted small">${item.description}</div></div>
+      <div><strong>${escapeHtml(item.name)}</strong><div class="text-muted small">${escapeHtml(item.description)}</div></div>
       <div class="d-flex gap-2">
-        <button class="btn btn-sm btn-outline-secondary" data-edit="${item.name}">Edit</button>
-        <button class="btn btn-sm btn-outline-danger" data-delete="${item.name}">Delete</button>
+        <button class="btn btn-sm btn-outline-secondary" data-edit="${item.name}">
+          <i class="bi bi-pencil"></i> Edit</button>
+        <button class="btn btn-sm btn-outline-danger" data-delete="${item.name}">
+          <i class="bi bi-trash"></i></button>
       </div>`;
     list.appendChild(row);
   }
@@ -358,6 +468,7 @@ function updateGenerateReadiness() {
 async function startGenerate() {
   $("generateBtn").disabled = true;
   $("downloadBtn").classList.add("d-none");
+  $("genSpinner").classList.remove("d-none");
   $("genLog").classList.remove("d-none");
   $("genLog").textContent = "";
   setStatus("genStatus", "Starting...", "muted");
@@ -374,6 +485,7 @@ async function startGenerate() {
     });
   } catch (e) {
     setStatus("genStatus", e.message, "danger");
+    $("genSpinner").classList.add("d-none");
     updateGenerateReadiness();
     return;
   }
@@ -389,10 +501,11 @@ async function startGenerate() {
       if (atBottom) $("genLog").scrollTop = $("genLog").scrollHeight;
     }
     if (status.status === "running") {
-      setStatus("genStatus", "Running...", "muted");
+      setStatus("genStatus", "Running... this can take several minutes.", "muted");
       return;
     }
     clearInterval(pollTimer);
+    $("genSpinner").classList.add("d-none");
     if (status.status === "done") {
       setStatus("genStatus", "Done -- workbook ready to download.", "success");
       $("downloadBtn").classList.remove("d-none");

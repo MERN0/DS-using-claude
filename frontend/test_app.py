@@ -67,6 +67,18 @@ def test_config_and_client_crud() -> None:
     assert "bcm" in [d["key"] for d in data["domains"]]
     assert "writing-style" in data["skills"]
     assert "search_sheet" in data["tools"]
+    assert "baseline rules" in data["baseline_memory"].lower()
+    assert len(data["built_in_subagents"]) == 6
+    assert data["built_in_subagents"][0]["name"] == "discovery-agent"
+
+    r = client.get("/api/skills/writing-style/baseline")
+    baseline = r.json()
+    assert baseline["body"]  # the real baseline skill body, not empty
+
+    r = client.get("/api/skills/domain-knowledge/baseline")
+    assert r.json()["body"] == ""  # no base_domain given -- nothing to show yet
+    r = client.get("/api/skills/domain-knowledge/baseline?base_domain=bcm")
+    assert r.json()["body"]
 
     r = client.post("/api/clients", json={"name": "acme"})
     assert r.status_code == 200 and r.json()["name"] == "acme"
