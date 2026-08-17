@@ -104,7 +104,7 @@ class ClientName(BaseModel):
 @app.post("/api/clients")
 def api_create_client(body: ClientName):
     try:
-        name = b.validate_client_name(body.name)
+        name = b.validate_new_client_name(body.name)
     except b.ValidationError as e:
         raise HTTPException(400, str(e)) from e
     # Nothing to write to disk yet -- a client with no customizations still

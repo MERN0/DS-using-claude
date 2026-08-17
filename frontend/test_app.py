@@ -100,6 +100,16 @@ def test_config_and_client_crud() -> None:
     r = client.post("/api/clients", json={"name": "../etc"})
     assert r.status_code == 400
 
+    # New-client naming convention (settings.validate_kebab_name): lowercase
+    # kebab-case only, sane length. validate_client_name (used to reference
+    # a possibly pre-existing client, e.g. before generating) stays lenient
+    # -- only the create-a-new-project path enforces this.
+    for bad_name in ["Acme_Corp", "a", "a" * 65, "-acme", "acme-"]:
+        r = client.post("/api/clients", json={"name": bad_name})
+        assert r.status_code == 400, bad_name
+    r = client.post("/api/clients", json={"name": "acme-corp-2"})
+    assert r.status_code == 200 and r.json()["name"] == "acme-corp-2"
+
     print("test_config_and_client_crud: OK")
 
 
@@ -144,8 +154,19 @@ def test_memory_skill_subagent_crud() -> None:
     # Subagents
     r = client.get("/api/clients/acme/subagents")
     assert r.json() == []
+
+    # Naming convention (settings.validate_kebab_name, require_suffix="-agent"):
+    # matches the six built-in subagents' own naming so a custom one reads
+    # identically in logs/task() delegations and can never collide with one.
+    for bad_name in ["extra-checks", "Extra-Checks-Agent", "extra_checks_agent"]:
+        r = client.put(
+            f"/api/clients/acme/subagents/{bad_name}",
+            json={"description": "x", "prompt_body": "y", "tools": [], "skills": []},
+        )
+        assert r.status_code == 400, bad_name
+
     r = client.put(
-        "/api/clients/acme/subagents/extra-checks",
+        "/api/clients/acme/subagents/extra-checks-agent",
         json={
             "description": "Cross-checks ISO 26262 tagging.",
             "prompt_body": "Check the ASIL column.",
@@ -156,7 +177,7 @@ def test_memory_skill_subagent_crud() -> None:
     assert r.status_code == 400  # bogus_tool rejected
 
     r = client.put(
-        "/api/clients/acme/subagents/extra-checks",
+        "/api/clients/acme/subagents/extra-checks-agent",
         json={
             "description": "Cross-checks ISO 26262 tagging.",
             "prompt_body": "Check the ASIL column.",
@@ -165,13 +186,13 @@ def test_memory_skill_subagent_crud() -> None:
         },
     )
     assert r.status_code == 200
-    r = client.get("/api/clients/acme/subagents/extra-checks")
+    r = client.get("/api/clients/acme/subagents/extra-checks-agent")
     assert r.json()["tools"] == ["search_sheet"]
     r = client.get("/api/clients/acme/subagents")
     assert len(r.json()) == 1
-    r = client.delete("/api/clients/acme/subagents/extra-checks")
+    r = client.delete("/api/clients/acme/subagents/extra-checks-agent")
     assert r.json()["deleted"] is True
-    r = client.get("/api/clients/acme/subagents/extra-checks")
+    r = client.get("/api/clients/acme/subagents/extra-checks-agent")
     assert r.status_code == 404
 
     print("test_memory_skill_subagent_crud: OK")

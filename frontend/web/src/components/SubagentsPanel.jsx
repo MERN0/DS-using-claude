@@ -7,12 +7,31 @@ import { useToast } from "./Toast.jsx";
 
 const EMPTY_FORM = { name: "", description: "", prompt_body: "", tools: [], skills: [] };
 
+// Mirrors settings.validate_kebab_name(..., require_suffix="-agent")
+// server-side -- UX aid only, the backend re-validates and is the actual
+// authority (builders.py's validate_subagent_name). The "-agent" suffix
+// matches the six built-in subagents' own naming (discovery-agent,
+// qa-validation-agent, ...) so a custom one reads identically in logs and
+// can never collide with a built-in name.
+const KEBAB_AGENT_RE = /^[a-z0-9]+(-[a-z0-9]+)*-agent$/;
+
+function nameHint(name) {
+  if (!name) return null;
+  if (name.length < 2 || name.length > 64) return "2-64 characters.";
+  if (!KEBAB_AGENT_RE.test(name)) {
+    return 'Lowercase-with-hyphens, ending in "-agent", e.g. "extra-safety-checks-agent".';
+  }
+  return null;
+}
+
 export default function SubagentsPanel({ client, builtIn, tools, skills }) {
   const [custom, setCustom] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [editingExisting, setEditingExisting] = useState(false);
   const [busy, setBusy] = useState(false);
   const toast = useToast();
+
+  const nameError = editingExisting ? null : nameHint(form.name.trim());
 
   const refresh = () => api.listSubagents(client).then(setCustom);
 
@@ -33,6 +52,7 @@ export default function SubagentsPanel({ client, builtIn, tools, skills }) {
 
   async function save() {
     if (!form.name.trim()) return toast("A subagent needs a name.", "error");
+    if (nameError) return toast(nameError, "error");
     setBusy(true);
     try {
       await api.putSubagent(client, form.name.trim(), {
@@ -159,13 +179,16 @@ export default function SubagentsPanel({ client, builtIn, tools, skills }) {
             A specialist the orchestrator can delegate a job to, alongside the six above &mdash; purely
             additive, never a replacement for the standard pipeline.
           </p>
-          <Input
-            value={form.name}
-            disabled={editingExisting}
-            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-            placeholder="name (lowercase-with-hyphens, e.g. extra-safety-checks-agent)"
-            className="mb-2.5"
-          />
+          <div className="mb-2.5">
+            <Input
+              value={form.name}
+              disabled={editingExisting}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              placeholder="name (lowercase-with-hyphens, e.g. extra-safety-checks-agent)"
+              className={nameError ? "border-rose-300 focus:border-rose-400 focus:ring-rose-100" : ""}
+            />
+            {nameError && <p className="mt-1 text-xs text-rose-600">{nameError}</p>}
+          </div>
           <Input
             value={form.description}
             onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
@@ -213,7 +236,7 @@ export default function SubagentsPanel({ client, builtIn, tools, skills }) {
             <Button
               tone="primary"
               icon={busy ? <Spinner className="h-4 w-4" /> : <Save className="h-4 w-4" />}
-              disabled={busy}
+              disabled={busy || !!nameError}
               onClick={save}
             >
               Save

@@ -40,7 +40,9 @@ export default function SkillsPanel({ client, skills, domains }) {
         </SectionTitle>
         <p className="text-sm text-ink-500 mb-4">
           Every skill a subagent can load. A project with no override for a skill runs on the baseline version
-          shown below &mdash; overriding one replaces it for this project only.
+          shown below &mdash; overriding one replaces it for this project only. This is the full, fixed list of
+          skills any subagent ever reads &mdash; unlike a project name or a custom subagent, a skill's name
+          isn't something you choose; you can only override one of the five below.
         </p>
         <div className="flex flex-col gap-2.5">
           {Object.entries(skills).map(([name, baseDesc]) => (

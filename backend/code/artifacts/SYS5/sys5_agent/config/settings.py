@@ -41,6 +41,49 @@ def validate_safe_name(name: str, label: str) -> str:
     return name
 
 
+# Stricter than _SAFE_NAME_RE: lowercase kebab-case only, no underscores/
+# dots/uppercase. This is a UX/consistency convention, not a security
+# backstop -- validate_kebab_name() below always runs validate_safe_name()
+# first for that, same as everywhere else. Matches the casing/format the
+# six built-in subagents already use (discovery-agent,
+# requirement-extraction-agent, ...) and the de facto convention real
+# Claude Skills use (kebab-case names, verb/action-oriented).
+_KEBAB_NAME_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
+
+
+def validate_kebab_name(
+    name: str,
+    label: str,
+    *,
+    min_len: int = 2,
+    max_len: int = 64,
+    require_suffix: str | None = None,
+) -> str:
+    """Stricter naming convention for anything a dashboard user creates
+    (client/project names, custom subagent names) -- lowercase kebab-case,
+    a sane length range, and optionally a required suffix (e.g. "-agent"
+    for a custom subagent, so it reads identically to the six built-in
+    ones in logs and task() delegations, and can never collide with one).
+
+    Deliberately NOT applied inside client_dir()/domain_dir() themselves --
+    those stay on the lenient validate_safe_name() backstop so an existing
+    or CLI-created client/domain with a name that predates this convention
+    (or was never routed through the dashboard) keeps working. This is a
+    creation-time UX convention, not a retroactive restriction.
+    """
+    name = validate_safe_name(name, label)
+    problems = []
+    if not (min_len <= len(name) <= max_len):
+        problems.append(f"{min_len}-{max_len} characters")
+    if not _KEBAB_NAME_RE.match(name):
+        problems.append("lowercase letters, digits, and single hyphens only (no underscores, dots, or CAPS)")
+    if require_suffix and not name.endswith(require_suffix):
+        problems.append(f"must end with {require_suffix!r} (e.g. 'extra-safety-checks{require_suffix}')")
+    if problems:
+        raise ValueError(f"Invalid {label} {name!r}: " + "; ".join(problems) + ".")
+    return name
+
+
 # ---------------------------------------------------------------------------
 # Automotive domains
 # ---------------------------------------------------------------------------

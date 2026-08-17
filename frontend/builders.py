@@ -120,6 +120,19 @@ def validate_client_name(name: str) -> str:
     return name.strip()
 
 
+def validate_new_client_name(name: str) -> str:
+    """Stricter check for *creating* a new project (see
+    `settings.validate_kebab_name`) -- used only by the "create a
+    project" flow, not by `validate_client_name` (which also validates a
+    reference to a possibly pre-existing client, e.g. before starting a
+    generation, and must keep accepting whatever's already there rather
+    than retroactively rejecting it)."""
+    try:
+        return settings.validate_kebab_name(name, "project name")
+    except ValueError as e:
+        raise ValidationError(str(e)) from e
+
+
 def list_clients() -> list[str]:
     if not settings.CLIENTS_DIR.is_dir():
         return []
@@ -277,11 +290,14 @@ class SubagentDraft:
 
 
 def validate_subagent_name(name: str) -> str:
+    """Kebab-case, ending in "-agent" -- matches the six built-in
+    subagents' own naming (discovery-agent, qa-validation-agent, ...) so a
+    client-authored one reads identically in logs/task() delegations and
+    can never collide with a built-in name."""
     try:
-        settings.validate_safe_name(name, "subagent name")
+        return settings.validate_kebab_name(name, "subagent name", require_suffix="-agent")
     except ValueError as e:
         raise ValidationError(str(e)) from e
-    return name.strip()
 
 
 def list_custom_subagents(client: str) -> list[dict]:

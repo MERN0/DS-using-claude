@@ -5,14 +5,28 @@ import { Card, CardBody, Button, Input, Select } from "./ui.jsx";
 import { api } from "../api.js";
 import { useToast } from "./Toast.jsx";
 
+// Mirrors settings.validate_kebab_name's rule server-side -- this is a UX
+// aid only, never the sole guard (the backend re-validates and is the
+// actual authority; see builders.py's validate_new_client_name).
+const KEBAB_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+
+function nameHint(name) {
+  if (!name) return null;
+  if (name.length < 2 || name.length > 64) return "2-64 characters.";
+  if (!KEBAB_RE.test(name)) return "Lowercase letters, digits, and single hyphens only, e.g. \"acme-corp\".";
+  return null;
+}
+
 export default function ClientPicker({ clients, currentClient, onSelect, onCreated }) {
   const [newName, setNewName] = useState("");
   const [busy, setBusy] = useState(false);
   const toast = useToast();
 
+  const hint = nameHint(newName.trim());
+
   async function createClient() {
     const name = newName.trim();
-    if (!name) return;
+    if (!name || hint) return;
     setBusy(true);
     try {
       await api.createClient(name);
@@ -39,7 +53,7 @@ export default function ClientPicker({ clients, currentClient, onSelect, onCreat
               top of the standard behavior. Nothing customized yet? It still runs fine on the defaults.
             </p>
 
-            <div className="mt-4 flex flex-wrap items-center gap-2.5">
+            <div className="mt-4 flex flex-wrap items-start gap-2.5">
               <Select
                 value={currentClient || ""}
                 onChange={(e) => e.target.value && onSelect(e.target.value)}
@@ -52,18 +66,25 @@ export default function ClientPicker({ clients, currentClient, onSelect, onCreat
                   </option>
                 ))}
               </Select>
-              <span className="text-xs font-medium uppercase tracking-wide text-ink-300">or</span>
-              <Input
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && createClient()}
-                placeholder="new-project-name"
-                className="max-w-[220px]"
-              />
+              <span className="mt-2 text-xs font-medium uppercase tracking-wide text-ink-300">or</span>
+              <div className="max-w-[220px]">
+                <Input
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && createClient()}
+                  placeholder="new-project-name"
+                  className={hint ? "border-rose-300 focus:border-rose-400 focus:ring-rose-100" : ""}
+                />
+                {hint ? (
+                  <p className="mt-1 text-xs text-rose-600">{hint}</p>
+                ) : (
+                  <p className="mt-1 text-xs text-ink-300">lowercase-with-hyphens</p>
+                )}
+              </div>
               <Button
                 tone="primary"
                 icon={<Plus className="h-4 w-4" />}
-                disabled={busy || !newName.trim()}
+                disabled={busy || !newName.trim() || !!hint}
                 onClick={createClient}
               >
                 Use this project
