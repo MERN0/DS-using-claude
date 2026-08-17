@@ -83,6 +83,11 @@ def api_config():
         "skills": b.OVERRIDABLE_SKILLS,
         "built_in_subagents": b.built_in_subagents(),
         "baseline_memory": b.read_baseline_memory(),
+        # Pure visibility, not a control -- lets whoever's operating this
+        # confirm the configured compaction trigger (85% of this value,
+        # see sys5_agent.agent.build) actually matches the real model
+        # endpoint's window rather than guessing.
+        "llm_context_tokens": settings.LLM_CONTEXT_TOKENS,
     }
 
 

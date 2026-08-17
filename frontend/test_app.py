@@ -76,6 +76,7 @@ def test_config_and_client_crud() -> None:
     assert "baseline rules" in data["baseline_memory"].lower()
     assert len(data["built_in_subagents"]) == 6
     assert data["built_in_subagents"][0]["name"] == "discovery-agent"
+    assert isinstance(data["llm_context_tokens"], int) and data["llm_context_tokens"] > 0
 
     r = client.get("/api/skills/writing-style/baseline")
     baseline = r.json()

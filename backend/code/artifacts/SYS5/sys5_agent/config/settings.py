@@ -120,6 +120,14 @@ REQUIREMENT_CHUNK_SIZE = int(os.environ.get("SYS5_REQUIREMENT_CHUNK_SIZE", "40")
 # into a single test case, to prevent runaway/unwieldy merges.
 MAX_REQS_PER_TESTCASE = int(os.environ.get("SYS5_MAX_REQS_PER_TESTCASE", "6"))
 
+# Upper bound on how many independent clusters resolution-agent /
+# test-case-drafting-agent may be asked to handle in one task() call --
+# processed independently within that call (never blended), one
+# resolved/<cluster_id>.md or draft row per cluster either way. This exists
+# purely to cut down on the number of separate LLM-backed delegations for a
+# run with many small clusters; it is not a correctness knob.
+MAX_CLUSTER_BATCH_SIZE = int(os.environ.get("SYS5_MAX_CLUSTER_BATCH_SIZE", "3"))
+
 # Bounded retries for the resolution subagent's search loop per cluster
 # before an item is marked `unresolved` instead of guessed.
 MAX_RESOLUTION_ATTEMPTS = int(os.environ.get("SYS5_MAX_RESOLUTION_ATTEMPTS", "5"))

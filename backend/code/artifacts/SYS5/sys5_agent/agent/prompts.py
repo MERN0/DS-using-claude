@@ -136,18 +136,34 @@ client's real files; `list_input_files()` is the only way there, full stop.
    qualifying rows there." A short chunk near the end of the sheet (fewer
    rows than the usual chunk size) is expected and not a gap.
 3. Delegate to merge-planning-agent once, for the coarse clustering pass.
-4. Delegate to resolution-agent once per cluster (batches of independent
-   clusters can be delegated in parallel calls).
+4. Delegate to resolution-agent for every cluster: group independent
+   clusters into batches of up to {settings.MAX_CLUSTER_BATCH_SIZE}
+   cluster_ids per call (resolution-agent handles each cluster in a batch
+   independently, one resolved/<cluster_id>.md per cluster either way --
+   batching only cuts down the number of separate delegations, it doesn't
+   change what gets produced). When you have more than one independent
+   batch ready, issue those batch calls in the same turn (multiple
+   parallel `task()` calls) rather than one at a time. Fall back to a
+   single cluster per call only for an unusually large/complex cluster, or
+   one with a concrete dependency on another cluster's outcome.
 5. If resolution surfaced signal/precondition overlap that the coarse
    clustering couldn't have known about, delegate to merge-planning-agent
    again for a refinement pass -- only when there's a concrete reason to.
-6. Delegate to test-case-drafting-agent once per (possibly revised)
-   cluster.
-7. Delegate to qa-validation-agent once, across the full draft set.
+6. Delegate to test-case-drafting-agent for every (possibly revised)
+   cluster, batched the same way as step 4 (up to
+   {settings.MAX_CLUSTER_BATCH_SIZE} already-resolved cluster_ids per
+   call, parallel batch calls when independent).
+7. Delegate to qa-validation-agent once, across the full draft set (no
+   `retry_cluster_ids` on this first call).
 8. If QA reports issues, delegate re-resolution/re-drafting for only the
-   affected clusters, then re-run qa-validation-agent. Repeat at most
-   {settings.MAX_QA_RETRIES} times; after that, for any cluster whose test
-   case is `Critical` priority and still failing, keep retrying that
+   affected clusters, then re-run qa-validation-agent -- this time passing
+   `retry_cluster_ids` (the cluster_ids you just re-resolved/re-drafted)
+   in its task message, so it scopes its content-specific checks to just
+   those clusters instead of re-checking the entire draft set again (it
+   still always re-checks the two whole-run checks -- traceability and
+   extraction coverage -- regardless, see its own description). Repeat at
+   most {settings.MAX_QA_RETRIES} times; after that, for any cluster whose
+   test case is `Critical` priority and still failing, keep retrying that
    cluster specifically for up to {settings.CRITICAL_MAX_RETRIES} further
    attempts (critical items get this extra budget precisely because they
    matter more than the rest). If a critical item is still failing after
@@ -189,7 +205,11 @@ client's real files; `list_input_files()` is the only way there, full stop.
   the run right there, incomplete, no matter what it says. If you're not
   actively delegating to a subagent, calling `write_output_workbook`, or
   writing `run_summary.json`, you are not finished -- take the next step
-  instead of describing one.
+  instead of describing one. This isn't just a completeness rule: stopping
+  without a tool call before `run_summary.json` exists triggers an
+  expensive full-context auto-continue resumption (see the caller's own
+  retry logic) rather than just picking up where you left off -- one more
+  concrete action is always cheaper than stopping and being nudged back in.
 - Use `write_todos` to track these phases and adapt the plan as you learn
   about the actual file (e.g. skip supporting-doc types that don't exist
   for this client; handle a requirements file that turns out to already
