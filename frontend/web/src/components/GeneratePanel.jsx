@@ -12,6 +12,9 @@ import {
 import { Card, CardBody, SectionTitle, Button, Input, Select, Spinner, Badge } from "./ui.jsx";
 import { api } from "../api.js";
 import { useToast } from "./Toast.jsx";
+import TodoChecklist from "./TodoChecklist.jsx";
+import UsagePanel from "./UsagePanel.jsx";
+import ClustersExplorer from "./ClustersExplorer.jsx";
 
 const StepBadge = ({ n }) => (
   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-600 text-[12px] font-semibold text-white">
@@ -31,7 +34,15 @@ export default function GeneratePanel({ client, domains, outputFormats }) {
   const [reqFile, setReqFile] = useState("");
   const [uploading, setUploading] = useState(false);
 
-  const [job, setJob] = useState({ status: "idle", log: [], error: null }); // idle | starting | running | done | error
+  const [job, setJob] = useState({
+    status: "idle", // idle | starting | running | done | error
+    log: [],
+    error: null,
+    todos: [],
+    currentPhase: null,
+    subagentUsage: {},
+    skillUsage: {},
+  });
   const pollRef = useRef(null);
   const sinceRef = useRef(0);
   const logBoxRef = useRef(null);
@@ -81,7 +92,17 @@ export default function GeneratePanel({ client, domains, outputFormats }) {
       sinceRef.current = status.log_total;
       setJob((j) => {
         const log = status.log.length ? [...j.log, ...status.log] : j.log;
-        return { ...j, log, status: status.status, error: status.error, summary: status.summary };
+        return {
+          ...j,
+          log,
+          status: status.status,
+          error: status.error,
+          summary: status.summary,
+          todos: status.todos || [],
+          currentPhase: status.current_phase,
+          subagentUsage: status.subagent_usage || {},
+          skillUsage: status.skill_usage || {},
+        };
       });
       if (status.status !== "running") {
         clearInterval(pollRef.current);
@@ -261,6 +282,18 @@ export default function GeneratePanel({ client, domains, outputFormats }) {
           </AnimatePresence>
         </CardBody>
       </Card>
+
+      {job.status !== "idle" && (
+        <>
+          <UsagePanel
+            currentPhase={job.currentPhase}
+            subagentUsage={job.subagentUsage}
+            skillUsage={job.skillUsage}
+          />
+          <TodoChecklist todos={job.todos} />
+          <ClustersExplorer />
+        </>
+      )}
     </div>
   );
 }

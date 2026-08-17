@@ -80,6 +80,24 @@ export const api = {
   generate: (payload, opts) => request("POST", "/api/generate", payload, opts),
   generateStatus: (since, opts) => request("GET", `/api/generate/status?since=${since}`, undefined, opts),
   downloadUrl: () => "/api/generate/download",
+
+  // Read-only views over the current run's workspace (see
+  // ../workspace_reader.py) -- all scoped to whatever generation is
+  // current/most-recent, 404ing before any run has produced one yet.
+  workspaceManifest: (opts) => request("GET", "/api/generate/workspace", undefined, opts),
+  workspaceClusters: (opts) => request("GET", "/api/generate/workspace/clusters", undefined, opts),
+  workspaceRequirements: (clusterId, opts) =>
+    request(
+      "GET",
+      `/api/generate/workspace/requirements${clusterId ? `?cluster_id=${enc(clusterId)}` : ""}`,
+      undefined,
+      opts
+    ),
+  workspaceTestcases: (opts) => request("GET", "/api/generate/workspace/testcases", undefined, opts),
+  workspaceResolved: (clusterId, opts) =>
+    request("GET", `/api/generate/workspace/resolved/${enc(clusterId)}`, undefined, opts),
+  workspaceQaReport: (opts) => request("GET", "/api/generate/workspace/qa_report", undefined, opts),
+  workspaceSummary: (opts) => request("GET", "/api/generate/workspace/summary", undefined, opts),
 };
 
 export { ApiError };
