@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Waypoints, ArrowRight } from "lucide-react";
+import { Waypoints, ArrowRight, AlertTriangle, RotateCcw } from "lucide-react";
 import { api } from "./api.js";
 import { ToastProvider } from "./components/Toast.jsx";
 import ClientPicker from "./components/ClientPicker.jsx";
@@ -9,7 +9,7 @@ import MemoryPanel from "./components/MemoryPanel.jsx";
 import SkillsPanel from "./components/SkillsPanel.jsx";
 import SubagentsPanel from "./components/SubagentsPanel.jsx";
 import GeneratePanel from "./components/GeneratePanel.jsx";
-import { Spinner } from "./components/ui.jsx";
+import { Spinner, Button } from "./components/ui.jsx";
 
 function Header() {
   return (
@@ -31,16 +31,29 @@ function Header() {
 
 export default function App() {
   const [config, setConfig] = useState(null);
+  const [configError, setConfigError] = useState(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [clients, setClients] = useState([]);
   const [currentClient, setCurrentClient] = useState(null);
   const [tab, setTab] = useState("memory");
 
   useEffect(() => {
-    api.getConfig().then((cfg) => {
-      setConfig(cfg);
-      setClients(cfg.clients);
-    });
-  }, []);
+    let cancelled = false;
+    setConfigError(null);
+    api
+      .getConfig()
+      .then((cfg) => {
+        if (cancelled) return;
+        setConfig(cfg);
+        setClients(cfg.clients);
+      })
+      .catch((e) => {
+        if (!cancelled) setConfigError(e.message || "Couldn't load configuration.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [loadAttempt]);
 
   function selectClient(name) {
     setCurrentClient(name);
@@ -50,6 +63,28 @@ export default function App() {
   function onCreated(name) {
     setClients((c) => (c.includes(name) ? c : [...c, name]));
     selectClient(name);
+  }
+
+  if (configError) {
+    return (
+      <div className="flex min-h-screen items-center justify-center p-6">
+        <div className="max-w-sm text-center">
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-rose-100 text-rose-600">
+            <AlertTriangle className="h-6 w-6" />
+          </div>
+          <h1 className="text-[15px] font-semibold text-ink-900">Couldn't load the dashboard</h1>
+          <p className="mt-1.5 text-sm text-ink-500">{configError}</p>
+          <Button
+            tone="primary"
+            className="mt-4"
+            icon={<RotateCcw className="h-4 w-4" />}
+            onClick={() => setLoadAttempt((n) => n + 1)}
+          >
+            Retry
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   if (!config) {

@@ -1,11 +1,17 @@
 // Thin fetch wrapper for the FastAPI backend (see ../app.py). No client-side
 // state beyond what each call needs -- the backend is a stateless REST API
 // except for the single generation job slot.
+//
+// Every exported function takes an optional trailing `{ signal }` so a
+// caller can cancel a request (e.g. via AbortController) when it's no
+// longer relevant -- switching clients quickly while a fetch is still in
+// flight would otherwise let a stale response overwrite newer state. A
+// caller that doesn't pass a signal behaves exactly as before.
 
 class ApiError extends Error {}
 
-async function request(method, url, body) {
-  const opts = { method, headers: {} };
+async function request(method, url, body, { signal } = {}) {
+  const opts = { method, headers: {}, signal };
   if (body !== undefined) {
     opts.headers["Content-Type"] = "application/json";
     opts.body = JSON.stringify(body);
@@ -26,43 +32,53 @@ async function request(method, url, body) {
 const enc = encodeURIComponent;
 
 export const api = {
-  getConfig: () => request("GET", "/api/config"),
+  getConfig: (opts) => request("GET", "/api/config", undefined, opts),
 
-  createClient: (name) => request("POST", "/api/clients", { name }),
+  createClient: (name, opts) => request("POST", "/api/clients", { name }, opts),
 
-  getMemory: (client) => request("GET", `/api/clients/${enc(client)}/memory`),
-  putMemory: (client, text) => request("PUT", `/api/clients/${enc(client)}/memory`, { text }),
-  deleteMemory: (client) => request("DELETE", `/api/clients/${enc(client)}/memory`),
+  getMemory: (client, opts) => request("GET", `/api/clients/${enc(client)}/memory`, undefined, opts),
+  putMemory: (client, text, opts) => request("PUT", `/api/clients/${enc(client)}/memory`, { text }, opts),
+  deleteMemory: (client, opts) => request("DELETE", `/api/clients/${enc(client)}/memory`, undefined, opts),
 
-  listSkills: (client) => request("GET", `/api/clients/${enc(client)}/skills`),
-  getSkill: (client, name, baseDomain) =>
+  listSkills: (client, opts) => request("GET", `/api/clients/${enc(client)}/skills`, undefined, opts),
+  getSkill: (client, name, baseDomain, opts) =>
     request(
       "GET",
-      `/api/clients/${enc(client)}/skills/${enc(name)}${baseDomain ? `?base_domain=${enc(baseDomain)}` : ""}`
+      `/api/clients/${enc(client)}/skills/${enc(name)}${baseDomain ? `?base_domain=${enc(baseDomain)}` : ""}`,
+      undefined,
+      opts
     ),
-  putSkill: (client, name, description, body) =>
-    request("PUT", `/api/clients/${enc(client)}/skills/${enc(name)}`, { description, body }),
-  deleteSkill: (client, name) => request("DELETE", `/api/clients/${enc(client)}/skills/${enc(name)}`),
-  getSkillBaseline: (name, baseDomain) =>
-    request("GET", `/api/skills/${enc(name)}/baseline${baseDomain ? `?base_domain=${enc(baseDomain)}` : ""}`),
+  putSkill: (client, name, description, body, opts) =>
+    request("PUT", `/api/clients/${enc(client)}/skills/${enc(name)}`, { description, body }, opts),
+  deleteSkill: (client, name, opts) =>
+    request("DELETE", `/api/clients/${enc(client)}/skills/${enc(name)}`, undefined, opts),
+  getSkillBaseline: (name, baseDomain, opts) =>
+    request(
+      "GET",
+      `/api/skills/${enc(name)}/baseline${baseDomain ? `?base_domain=${enc(baseDomain)}` : ""}`,
+      undefined,
+      opts
+    ),
 
-  listSubagents: (client) => request("GET", `/api/clients/${enc(client)}/subagents`),
-  getSubagent: (client, name) => request("GET", `/api/clients/${enc(client)}/subagents/${enc(name)}`),
-  putSubagent: (client, name, payload) =>
-    request("PUT", `/api/clients/${enc(client)}/subagents/${enc(name)}`, payload),
-  deleteSubagent: (client, name) => request("DELETE", `/api/clients/${enc(client)}/subagents/${enc(name)}`),
+  listSubagents: (client, opts) => request("GET", `/api/clients/${enc(client)}/subagents`, undefined, opts),
+  getSubagent: (client, name, opts) =>
+    request("GET", `/api/clients/${enc(client)}/subagents/${enc(name)}`, undefined, opts),
+  putSubagent: (client, name, payload, opts) =>
+    request("PUT", `/api/clients/${enc(client)}/subagents/${enc(name)}`, payload, opts),
+  deleteSubagent: (client, name, opts) =>
+    request("DELETE", `/api/clients/${enc(client)}/subagents/${enc(name)}`, undefined, opts),
 
-  upload: async (files) => {
+  upload: async (files, { signal } = {}) => {
     const form = new FormData();
     for (const f of files) form.append("files", f);
-    const res = await fetch("/api/upload", { method: "POST", body: form });
+    const res = await fetch("/api/upload", { method: "POST", body: form, signal });
     const data = await res.json();
     if (!res.ok) throw new ApiError(data.detail || "Upload failed.");
     return data;
   },
 
-  generate: (payload) => request("POST", "/api/generate", payload),
-  generateStatus: (since) => request("GET", `/api/generate/status?since=${since}`),
+  generate: (payload, opts) => request("POST", "/api/generate", payload, opts),
+  generateStatus: (since, opts) => request("GET", `/api/generate/status?since=${since}`, undefined, opts),
   downloadUrl: () => "/api/generate/download",
 };
 
