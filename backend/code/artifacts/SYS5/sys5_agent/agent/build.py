@@ -40,6 +40,7 @@ from sys5_agent.agent.prompts import ORCHESTRATOR_SYSTEM_PROMPT
 from sys5_agent.agent.subagents import build_subagents
 from sys5_agent.config import settings
 from sys5_agent.tools.excel_tools import build_write_tool
+from sys5_agent.tools.mcp_tools import fetch_mcp_tools
 
 
 def _new_run_dir() -> Path:
@@ -145,10 +146,15 @@ def build_agent(client: str, domain: str, input_dir: Path, output_path: Path):
     run_dir = _new_run_dir()
     _write_layered_memory(run_dir, client, domain)
     _copy_layered_skills(run_dir, client, domain)
+    # Fetched once per run (not once per subagent, to avoid launching
+    # redundant server subprocesses) -- a no-op returning [] instantly
+    # unless settings.MCP_ENABLED is set, see tools/mcp_tools.py.
+    mcp_tools = fetch_mcp_tools()
+
     # Must come after _copy_layered_skills: it validates each custom
     # subagent's requested skill names against what's actually present
     # under run_dir/skills/ for this run.
-    custom_subagents = load_custom_subagents(client, input_dir, run_dir)
+    custom_subagents = load_custom_subagents(client, input_dir, run_dir, extra_tools=mcp_tools)
 
     llm = ChatOpenAI(
         model=settings.LLM_MODEL,

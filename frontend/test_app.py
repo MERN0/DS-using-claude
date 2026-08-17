@@ -80,6 +80,10 @@ def test_config_and_client_crud() -> None:
     assert "bcm" in [d["key"] for d in data["domains"]]
     assert "writing-style" in data["skills"]
     assert "search_sheet" in data["tools"]
+    # Curated MCP tools (tools/mcp_tools.py) are always listed -- selectable
+    # regardless of whether MCP_ENABLED is actually on for a real run.
+    assert "fetch" in data["tools"]
+    assert "sequentialthinking" in data["tools"]
     assert "baseline rules" in data["baseline_memory"].lower()
     assert len(data["built_in_subagents"]) == 6
     assert data["built_in_subagents"][0]["name"] == "discovery-agent"
@@ -181,13 +185,13 @@ def test_memory_skill_subagent_crud() -> None:
         json={
             "description": "Cross-checks ISO 26262 tagging.",
             "prompt_body": "Check the ASIL column.",
-            "tools": ["search_sheet"],
+            "tools": ["search_sheet", "fetch"],  # a curated MCP tool, alongside a sandboxed excel one
             "skills": ["domain-knowledge"],
         },
     )
     assert r.status_code == 200
     r = client.get("/api/clients/acme/subagents/extra-checks-agent")
-    assert r.json()["tools"] == ["search_sheet"]
+    assert r.json()["tools"] == ["search_sheet", "fetch"]
     r = client.get("/api/clients/acme/subagents")
     assert len(r.json()) == 1
     r = client.delete("/api/clients/acme/subagents/extra-checks-agent")

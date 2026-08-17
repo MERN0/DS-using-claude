@@ -275,6 +275,16 @@ TEST_CASE_ID_PREFIX = "TC_SYS_"
 
 DEBUG = os.environ.get("SYS5_DEBUG", "0") == "1"
 
+# Optional curated MCP tool support (see tools/mcp_tools.py) -- off by
+# default. A client-authored custom subagent can only ever select from the
+# fixed, code-reviewed server list there; there is no UI path to point at
+# an arbitrary MCP server. MCP_TOOL_TIMEOUT_SECONDS is generous (60s)
+# because a cold `npx`/`uvx` first-run package resolution measured well
+# over a minute in testing -- too short a timeout would make the feature
+# fail more often than the servers themselves actually do.
+MCP_ENABLED = os.environ.get("SYS5_MCP_ENABLED", "0") == "1"
+MCP_TOOL_TIMEOUT_SECONDS = int(os.environ.get("SYS5_MCP_TOOL_TIMEOUT_SECONDS", "60"))
+
 
 def client_dir(client: str) -> Path:
     """Resolve a client/project name to its clients/<name> directory, falling

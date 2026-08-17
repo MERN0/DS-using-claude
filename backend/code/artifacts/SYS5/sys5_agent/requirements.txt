@@ -3,3 +3,12 @@ langchain-openai>=0.2.0
 langgraph>=0.2.0
 openpyxl>=3.1.0
 pyyaml>=6.0
+
+# Optional MCP tool support (see tools/mcp_tools.py, off by default --
+# config.settings.MCP_ENABLED). mcp>=2.0.0 is a breaking rewrite the rest of
+# the MCP ecosystem hasn't caught up to yet as of this writing --
+# langchain-mcp-adapters itself won't import against it (confirmed directly:
+# `from mcp import ClientSession` fails deep inside mcp.types on 2.0.0) -- so
+# this pin is load-bearing, not cosmetic; don't drop the upper bound.
+langchain-mcp-adapters>=0.3.2
+mcp>=1.24.0,<2.0.0

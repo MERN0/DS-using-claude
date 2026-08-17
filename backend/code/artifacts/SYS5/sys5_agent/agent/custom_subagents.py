@@ -121,19 +121,22 @@ def _parse_subagent_file(path: Path) -> dict[str, Any] | None:
     }
 
 
-def load_custom_subagents(client: str, input_root: Path, run_dir: Path) -> list[dict]:
+def load_custom_subagents(client: str, input_root: Path, run_dir: Path, extra_tools: list | None = None) -> list[dict]:
     """Load every `clients/<client>/subagents/*.md` file into subagent dicts,
     ready to append to `build_subagents(input_root)`'s return value.
 
     `input_root` resolves each requested tool name against this run's real
     tool instances (see `tools/excel_tools.build_read_only_tools`); an
     unknown tool name is dropped (with a printed warning), not treated as a
-    reason to skip the whole subagent. `run_dir` is used the same way for
-    skill names: only a skill that's actually present under
-    `run_dir/skills/` (i.e. one of the baseline/domain/client skills this
-    run already layered in -- see `agent/build.py`) is kept, since a
-    reference to a skill that was never copied into this run's workspace
-    would be a dead reference.
+    reason to skip the whole subagent. `extra_tools`, if given (see
+    `tools/mcp_tools.py`), are added to that same by-name lookup -- a
+    client can request one of these by name exactly like a built-in excel
+    tool, no separate mechanism. `run_dir` is used the same way for skill
+    names: only a skill that's actually present under `run_dir/skills/`
+    (i.e. one of the baseline/domain/client skills this run already
+    layered in -- see `agent/build.py`) is kept, since a reference to a
+    skill that was never copied into this run's workspace would be a dead
+    reference.
     """
     if client == settings.DEFAULT_CLIENT_DIR_NAME:
         return []
@@ -142,6 +145,8 @@ def load_custom_subagents(client: str, input_root: Path, run_dir: Path) -> list[
         return []
 
     tools_by_name = {t.name: t for t in build_read_only_tools(input_root)}
+    for t in extra_tools or []:
+        tools_by_name[t.name] = t
     run_skills_dir = run_dir / "skills"
 
     out: list[dict] = []

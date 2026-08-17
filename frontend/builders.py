@@ -31,6 +31,7 @@ from sys5_agent.agent.custom_subagents import FRONTMATTER_RE  # noqa: E402
 from sys5_agent.agent.subagents import build_subagents  # noqa: E402
 from sys5_agent.config import settings  # noqa: E402
 from sys5_agent.tools.excel_tools import build_read_only_tools  # noqa: E402
+from sys5_agent.tools.mcp_tools import available_mcp_tool_names  # noqa: E402
 
 
 class ValidationError(ValueError):
@@ -53,12 +54,18 @@ def _first_sentence(docstring: str) -> str:
 
 
 def available_tools() -> dict[str, str]:
-    """{tool_name: one-line description}, straight from the real tool
-    objects (see `tools/excel_tools.build_read_only_tools`) -- the path
-    used to build them doesn't need to exist, only their names/docstrings
-    are read."""
+    """{tool_name: one-line description}: the 5 sandboxed excel tools
+    (straight from the real tool objects, see
+    `tools/excel_tools.build_read_only_tools` -- the path used to build
+    them doesn't need to exist, only their names/docstrings are read) plus
+    the curated MCP tools (see `tools/mcp_tools.py`). The MCP names are
+    always listed here regardless of whether `MCP_ENABLED` is actually on
+    for a real run -- a client can see and select them either way; only an
+    actual generation needs the feature turned on to have them for real."""
     tools = build_read_only_tools(Path("/__ui_reference_only__"))
-    return {t.name: _first_sentence(t.description) for t in tools}
+    out = {t.name: _first_sentence(t.description) for t in tools}
+    out.update(available_mcp_tool_names())
+    return out
 
 
 def built_in_subagents() -> list[dict]:
