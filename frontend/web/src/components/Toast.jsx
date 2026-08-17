@@ -25,7 +25,12 @@ export function ToastProvider({ children }) {
   return (
     <ToastCtx.Provider value={push}>
       {children}
-      <div className="fixed bottom-5 right-5 z-50 flex flex-col gap-2 w-80 max-w-[90vw]">
+      <div
+        role="status"
+        aria-live="polite"
+        aria-atomic="false"
+        className="fixed bottom-5 right-5 z-50 flex flex-col gap-2 w-80 max-w-[90vw]"
+      >
         <AnimatePresence>
           {toasts.map((t) => (
             <motion.div

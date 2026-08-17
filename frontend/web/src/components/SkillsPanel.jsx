@@ -1,7 +1,18 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { GraduationCap, Pencil, Trash2, Save, X, ChevronDown } from "lucide-react";
-import { Card, CardBody, SectionTitle, Badge, Button, Input, Textarea, Select, Spinner } from "./ui.jsx";
+import {
+  Card,
+  CardBody,
+  SectionTitle,
+  Badge,
+  Button,
+  Input,
+  Textarea,
+  Select,
+  Spinner,
+  ConfirmDialog,
+} from "./ui.jsx";
 import { api } from "../api.js";
 import { useToast } from "./Toast.jsx";
 
@@ -40,8 +51,8 @@ export default function SkillsPanel({ client, skills, domains }) {
         </SectionTitle>
         <p className="text-sm text-ink-500 mb-4">
           Every skill a subagent can load. A project with no override for a skill runs on the baseline version
-          shown below &mdash; overriding one replaces it for this project only. This is the full, fixed list of
-          skills any subagent ever reads &mdash; unlike a project name or a custom subagent, a skill's name
+          shown below &mdash; overriding one replaces it for this project only. This is the full, fixed list
+          of skills any subagent ever reads &mdash; unlike a project name or a custom subagent, a skill's name
           isn't something you choose; you can only override one of the five below.
         </p>
         <div className="flex flex-col gap-2.5">
@@ -92,6 +103,7 @@ function SkillCard({
   const [baseline, setBaseline] = useState(null);
   const [form, setForm] = useState({ description: "", body: "" });
   const [busy, setBusy] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   useEffect(() => {
     if (!expanded) return;
@@ -130,8 +142,8 @@ function SkillCard({
     }
   }
 
-  async function remove(e) {
-    e.stopPropagation();
+  async function remove() {
+    setConfirmingDelete(false);
     setBusy(true);
     try {
       await api.deleteSkill(client, name);
@@ -174,6 +186,7 @@ function SkillCard({
                   {isDomainKnowledge && (
                     <div className="mb-3 flex items-center gap-2">
                       <Select
+                        aria-label="Baseline for domain"
                         value={baseDomain}
                         onChange={(e) => {
                           setBaseDomain(e.target.value);
@@ -214,7 +227,10 @@ function SkillCard({
                         tone="danger"
                         icon={<Trash2 className="h-3.5 w-3.5" />}
                         disabled={busy}
-                        onClick={remove}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setConfirmingDelete(true);
+                        }}
                       >
                         Remove override
                       </Button>
@@ -223,15 +239,27 @@ function SkillCard({
                 </>
               ) : (
                 <>
-                  <label className="mb-1 block text-xs font-medium text-ink-500">Description</label>
+                  <label
+                    htmlFor={`skill-${name}-description`}
+                    className="mb-1 block text-xs font-medium text-ink-500"
+                  >
+                    Description
+                  </label>
                   <Input
+                    id={`skill-${name}-description`}
                     value={form.description}
                     onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
                     placeholder="One sentence: what this covers and when to read it."
                     className="mb-2.5"
                   />
-                  <label className="mb-1 block text-xs font-medium text-ink-500">Body (Markdown)</label>
+                  <label
+                    htmlFor={`skill-${name}-body`}
+                    className="mb-1 block text-xs font-medium text-ink-500"
+                  >
+                    Body (Markdown)
+                  </label>
                   <Textarea
+                    id={`skill-${name}-body`}
                     rows={10}
                     value={form.body}
                     onChange={(e) => setForm((f) => ({ ...f, body: e.target.value }))}
@@ -261,6 +289,15 @@ function SkillCard({
           </motion.div>
         )}
       </AnimatePresence>
+
+      <ConfirmDialog
+        open={confirmingDelete}
+        title={`Remove the override for "${name}"?`}
+        description="This project falls back to the baseline version of this skill. This can't be undone."
+        confirmLabel="Remove override"
+        onConfirm={remove}
+        onCancel={() => setConfirmingDelete(false)}
+      />
     </div>
   );
 }

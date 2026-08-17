@@ -50,6 +50,42 @@ export default function GeneratePanel({ client, domains, outputFormats }) {
 
   useEffect(() => () => clearInterval(pollRef.current), []);
 
+  // Resume-on-mount: the backend's job/run-state is a single global slot
+  // (see app.py's `_job`/`_run_state`), independent of this component's own
+  // React state -- so a run started before a page refresh (or before this
+  // tab was ever opened) is still progressing server-side and worth
+  // reattaching to, rather than showing "idle" until the user starts a new
+  // one. A one-shot status check on mount is enough: if nothing is running,
+  // this is a harmless no-op single request.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      let status;
+      try {
+        status = await api.generateStatus(0);
+      } catch {
+        return;
+      }
+      if (cancelled || status.status === "idle") return;
+      sinceRef.current = status.log_total;
+      setJob({
+        status: status.status,
+        log: status.log,
+        error: status.error,
+        summary: status.summary,
+        todos: status.todos || [],
+        currentPhase: status.current_phase,
+        subagentUsage: status.subagent_usage || {},
+        skillUsage: status.skill_usage || {},
+      });
+      if (status.status === "running") pollStatus();
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const ready = client && uploadId && version.trim() && username.trim() && reqFile;
 
   async function doUpload() {
@@ -68,25 +104,8 @@ export default function GeneratePanel({ client, domains, outputFormats }) {
     }
   }
 
-  async function startGenerate() {
-    setJob({ status: "starting", log: [], error: null });
-    sinceRef.current = 0;
-    try {
-      await api.generate({
-        client,
-        domain,
-        output_format: format,
-        username,
-        current_version: version,
-        upload_id: uploadId,
-        requirement_filename: reqFile,
-      });
-    } catch (e) {
-      setJob({ status: "error", log: [], error: e.message });
-      return;
-    }
-
-    setJob((j) => ({ ...j, status: "running" }));
+  function pollStatus() {
+    clearInterval(pollRef.current);
     pollRef.current = setInterval(async () => {
       const status = await api.generateStatus(sinceRef.current);
       sinceRef.current = status.log_total;
@@ -110,6 +129,28 @@ export default function GeneratePanel({ client, domains, outputFormats }) {
     }, 1300);
   }
 
+  async function startGenerate() {
+    setJob({ status: "starting", log: [], error: null });
+    sinceRef.current = 0;
+    try {
+      await api.generate({
+        client,
+        domain,
+        output_format: format,
+        username,
+        current_version: version,
+        upload_id: uploadId,
+        requirement_filename: reqFile,
+      });
+    } catch (e) {
+      setJob({ status: "error", log: [], error: e.message });
+      return;
+    }
+
+    setJob((j) => ({ ...j, status: "running" }));
+    pollStatus();
+  }
+
   useEffect(() => {
     const el = logBoxRef.current;
     if (el) el.scrollTop = el.scrollHeight;
@@ -123,8 +164,13 @@ export default function GeneratePanel({ client, domains, outputFormats }) {
         <CardBody>
           <SectionTitle icon={<StepBadge n={1} />}>Run settings</SectionTitle>
           <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Field label="Domain">
-              <Select value={domain} onChange={(e) => setDomain(e.target.value)} className="w-full">
+            <Field label="Domain" id="gen-domain">
+              <Select
+                id="gen-domain"
+                value={domain}
+                onChange={(e) => setDomain(e.target.value)}
+                className="w-full"
+              >
                 {domains.map((d) => (
                   <option key={d.key} value={d.key}>
                     {d.label}
@@ -132,8 +178,13 @@ export default function GeneratePanel({ client, domains, outputFormats }) {
                 ))}
               </Select>
             </Field>
-            <Field label="Output format">
-              <Select value={format} onChange={(e) => setFormat(e.target.value)} className="w-full">
+            <Field label="Output format" id="gen-format">
+              <Select
+                id="gen-format"
+                value={format}
+                onChange={(e) => setFormat(e.target.value)}
+                className="w-full"
+              >
                 {outputFormats.map((f) => (
                   <option key={f} value={f}>
                     {f}
@@ -141,11 +192,21 @@ export default function GeneratePanel({ client, domains, outputFormats }) {
                 ))}
               </Select>
             </Field>
-            <Field label="Version">
-              <Input value={version} onChange={(e) => setVersion(e.target.value)} placeholder="v1" />
+            <Field label="Version" id="gen-version">
+              <Input
+                id="gen-version"
+                value={version}
+                onChange={(e) => setVersion(e.target.value)}
+                placeholder="v1"
+              />
             </Field>
-            <Field label="Requested by">
-              <Input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="your name" />
+            <Field label="Requested by" id="gen-username">
+              <Input
+                id="gen-username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="your name"
+              />
             </Field>
           </div>
         </CardBody>
@@ -192,10 +253,11 @@ export default function GeneratePanel({ client, domains, outputFormats }) {
                 exit={{ opacity: 0, height: 0 }}
                 className="mt-3.5"
               >
-                <label className="mb-1 block text-xs font-medium text-ink-500">
+                <label htmlFor="gen-req-file" className="mb-1 block text-xs font-medium text-ink-500">
                   Which uploaded file is the requirements workbook?
                 </label>
                 <Select
+                  id="gen-req-file"
                   value={reqFile}
                   onChange={(e) => setReqFile(e.target.value)}
                   className="max-w-md w-full"
@@ -298,10 +360,12 @@ export default function GeneratePanel({ client, domains, outputFormats }) {
   );
 }
 
-function Field({ label, children }) {
+function Field({ label, id, children }) {
   return (
     <div>
-      <label className="mb-1 block text-xs font-medium text-ink-500">{label}</label>
+      <label htmlFor={id} className="mb-1 block text-xs font-medium text-ink-500">
+        {label}
+      </label>
       {children}
     </div>
   );

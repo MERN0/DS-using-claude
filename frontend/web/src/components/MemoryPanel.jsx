@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ShieldCheck, PencilLine, Eye, EyeOff, Save, Trash2 } from "lucide-react";
-import { Card, CardBody, SectionTitle, Badge, Button, Textarea, Spinner } from "./ui.jsx";
+import { Card, CardBody, SectionTitle, Badge, Button, Textarea, Spinner, ConfirmDialog } from "./ui.jsx";
 import { api } from "../api.js";
 import { useToast } from "./Toast.jsx";
 
@@ -10,6 +10,7 @@ export default function MemoryPanel({ client, baselineMemory }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showBaseline, setShowBaseline] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const toast = useToast();
 
   useEffect(() => {
@@ -39,6 +40,7 @@ export default function MemoryPanel({ client, baselineMemory }) {
   }
 
   async function remove() {
+    setConfirmingDelete(false);
     try {
       await api.deleteMemory(client);
       setText("");
@@ -99,6 +101,7 @@ export default function MemoryPanel({ client, baselineMemory }) {
           ) : (
             <>
               <Textarea
+                aria-label="This project's memory addition"
                 rows={7}
                 value={text}
                 onChange={(e) => setText(e.target.value)}
@@ -114,7 +117,12 @@ export default function MemoryPanel({ client, baselineMemory }) {
                 >
                   Save
                 </Button>
-                <Button tone="danger" icon={<Trash2 className="h-4 w-4" />} onClick={remove}>
+                <Button
+                  tone="danger"
+                  icon={<Trash2 className="h-4 w-4" />}
+                  disabled={!text}
+                  onClick={() => setConfirmingDelete(true)}
+                >
                   Delete
                 </Button>
                 {!loading && (
@@ -127,6 +135,15 @@ export default function MemoryPanel({ client, baselineMemory }) {
           )}
         </CardBody>
       </Card>
+
+      <ConfirmDialog
+        open={confirmingDelete}
+        title="Delete this project's memory addition?"
+        description="The baseline rules above stay in effect; only this project's addition is removed. This can't be undone."
+        confirmLabel="Delete"
+        onConfirm={remove}
+        onCancel={() => setConfirmingDelete(false)}
+      />
     </div>
   );
 }

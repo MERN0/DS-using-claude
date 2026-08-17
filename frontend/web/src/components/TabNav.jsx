@@ -9,13 +9,34 @@ const TABS = [
 ];
 
 export default function TabNav({ active, onChange }) {
+  function onKeyDown(e) {
+    const idx = TABS.findIndex((t) => t.key === active);
+    if (e.key === "ArrowRight") {
+      e.preventDefault();
+      onChange(TABS[(idx + 1) % TABS.length].key);
+    } else if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      onChange(TABS[(idx - 1 + TABS.length) % TABS.length].key);
+    }
+  }
+
   return (
-    <div className="mb-6 flex gap-1 rounded-xl border border-ink-100 bg-white/70 p-1 backdrop-blur-sm w-fit">
+    <div
+      role="tablist"
+      aria-label="Project sections"
+      onKeyDown={onKeyDown}
+      className="mb-6 flex gap-1 rounded-xl border border-ink-100 bg-white/70 p-1 backdrop-blur-sm w-fit"
+    >
       {TABS.map(({ key, label, icon: Icon }) => {
         const isActive = active === key;
         return (
           <button
             key={key}
+            role="tab"
+            id={`tab-${key}`}
+            aria-selected={isActive}
+            aria-controls={`tabpanel-${key}`}
+            tabIndex={isActive ? 0 : -1}
             onClick={() => onChange(key)}
             className={`relative flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition-colors
               ${isActive ? "text-brand-700" : "text-ink-500 hover:text-ink-800"}`}

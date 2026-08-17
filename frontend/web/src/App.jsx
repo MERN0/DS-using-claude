@@ -11,6 +11,10 @@ import SubagentsPanel from "./components/SubagentsPanel.jsx";
 import GeneratePanel from "./components/GeneratePanel.jsx";
 import { Spinner, Button } from "./components/ui.jsx";
 
+const STORAGE_KEY_CLIENT = "sys5.currentClient";
+const STORAGE_KEY_TAB = "sys5.tab";
+const VALID_TABS = ["memory", "skills", "subagents", "generate"];
+
 function Header() {
   return (
     <header className="sticky top-0 z-40 border-b border-ink-100 bg-white/80 backdrop-blur-md">
@@ -46,6 +50,16 @@ export default function App() {
         if (cancelled) return;
         setConfig(cfg);
         setClients(cfg.clients);
+        // Restore the last-used project/tab, but only if that project still
+        // exists -- a stale localStorage entry (project deleted since the
+        // last visit) must fall back to "pick a project" rather than
+        // pointing at a client that no longer resolves server-side.
+        const savedClient = localStorage.getItem(STORAGE_KEY_CLIENT);
+        if (savedClient && cfg.clients.includes(savedClient)) {
+          setCurrentClient(savedClient);
+          const savedTab = localStorage.getItem(STORAGE_KEY_TAB);
+          if (savedTab && VALID_TABS.includes(savedTab)) setTab(savedTab);
+        }
       })
       .catch((e) => {
         if (!cancelled) setConfigError(e.message || "Couldn't load configuration.");
@@ -58,11 +72,18 @@ export default function App() {
   function selectClient(name) {
     setCurrentClient(name);
     setTab("memory");
+    localStorage.setItem(STORAGE_KEY_CLIENT, name);
+    localStorage.setItem(STORAGE_KEY_TAB, "memory");
   }
 
   function onCreated(name) {
     setClients((c) => (c.includes(name) ? c : [...c, name]));
     selectClient(name);
+  }
+
+  function changeTab(next) {
+    setTab(next);
+    localStorage.setItem(STORAGE_KEY_TAB, next);
   }
 
   if (configError) {
@@ -108,10 +129,13 @@ export default function App() {
 
         {currentClient && (
           <>
-            <TabNav active={tab} onChange={setTab} />
+            <TabNav active={tab} onChange={changeTab} />
             <AnimatePresence mode="wait">
               <motion.div
                 key={tab}
+                role="tabpanel"
+                id={`tabpanel-${tab}`}
+                aria-labelledby={`tab-${tab}`}
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -8 }}

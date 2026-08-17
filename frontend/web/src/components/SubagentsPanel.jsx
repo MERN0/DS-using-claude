@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Users, Bot, UserPlus, Pencil, Trash2, Save, X } from "lucide-react";
-import { Card, CardBody, SectionTitle, Button, Input, Textarea, Spinner } from "./ui.jsx";
+import { Card, CardBody, SectionTitle, Button, Input, Textarea, Spinner, ConfirmDialog } from "./ui.jsx";
 import { api } from "../api.js";
 import { useToast } from "./Toast.jsx";
 
@@ -29,6 +29,7 @@ export default function SubagentsPanel({ client, builtIn, tools, skills }) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [editingExisting, setEditingExisting] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const toast = useToast();
 
   const nameError = editingExisting ? null : nameHint(form.name.trim());
@@ -73,6 +74,7 @@ export default function SubagentsPanel({ client, builtIn, tools, skills }) {
   }
 
   async function remove(name) {
+    setDeleteTarget(null);
     await api.deleteSubagent(client, name);
     toast(`Deleted "${name}".`, "info");
     refresh();
@@ -158,8 +160,9 @@ export default function SubagentsPanel({ client, builtIn, tools, skills }) {
                       <Button
                         size="sm"
                         tone="danger"
+                        aria-label={`Delete subagent "${s.name}"`}
                         icon={<Trash2 className="h-3.5 w-3.5" />}
-                        onClick={() => remove(s.name)}
+                        onClick={() => setDeleteTarget(s.name)}
                       />
                     </div>
                   </motion.div>
@@ -180,7 +183,11 @@ export default function SubagentsPanel({ client, builtIn, tools, skills }) {
             additive, never a replacement for the standard pipeline.
           </p>
           <div className="mb-2.5">
+            <label htmlFor="subagent-name" className="sr-only">
+              Subagent name
+            </label>
             <Input
+              id="subagent-name"
               value={form.name}
               disabled={editingExisting}
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
@@ -189,13 +196,21 @@ export default function SubagentsPanel({ client, builtIn, tools, skills }) {
             />
             {nameError && <p className="mt-1 text-xs text-rose-600">{nameError}</p>}
           </div>
+          <label htmlFor="subagent-description" className="sr-only">
+            Subagent description
+          </label>
           <Input
+            id="subagent-description"
             value={form.description}
             onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
             placeholder="One or two sentences: what it does and when the orchestrator should call it."
             className="mb-2.5"
           />
+          <label htmlFor="subagent-prompt-body" className="sr-only">
+            Subagent system prompt
+          </label>
           <Textarea
+            id="subagent-prompt-body"
             rows={7}
             value={form.prompt_body}
             onChange={(e) => setForm((f) => ({ ...f, prompt_body: e.target.value }))}
@@ -204,8 +219,10 @@ export default function SubagentsPanel({ client, builtIn, tools, skills }) {
           />
 
           <div className="mb-3">
-            <div className="mb-1.5 text-xs font-medium text-ink-500">Tools it can use</div>
-            <div className="flex flex-wrap gap-2">
+            <div id="subagent-tools-label" className="mb-1.5 text-xs font-medium text-ink-500">
+              Tools it can use
+            </div>
+            <div role="group" aria-labelledby="subagent-tools-label" className="flex flex-wrap gap-2">
               {Object.keys(tools).map((t) => (
                 <Chip
                   key={t}
@@ -218,8 +235,10 @@ export default function SubagentsPanel({ client, builtIn, tools, skills }) {
             </div>
           </div>
           <div className="mb-4">
-            <div className="mb-1.5 text-xs font-medium text-ink-500">Skills it has access to</div>
-            <div className="flex flex-wrap gap-2">
+            <div id="subagent-skills-label" className="mb-1.5 text-xs font-medium text-ink-500">
+              Skills it has access to
+            </div>
+            <div role="group" aria-labelledby="subagent-skills-label" className="flex flex-wrap gap-2">
               {Object.keys(skills).map((s) => (
                 <Chip
                   key={s}
@@ -253,6 +272,15 @@ export default function SubagentsPanel({ client, builtIn, tools, skills }) {
           </div>
         </CardBody>
       </Card>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title={`Delete "${deleteTarget}"?`}
+        description="This custom subagent is removed for this project. This can't be undone."
+        confirmLabel="Delete"
+        onConfirm={() => remove(deleteTarget)}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }
@@ -262,6 +290,7 @@ function Chip({ label, title, active, onClick }) {
     <button
       type="button"
       title={title}
+      aria-pressed={active}
       onClick={onClick}
       className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors
         ${active ? "border-brand-400 bg-brand-100 text-brand-700" : "border-ink-200 bg-white text-ink-600 hover:bg-ink-50"}`}

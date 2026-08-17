@@ -13,7 +13,7 @@ const KEBAB_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 function nameHint(name) {
   if (!name) return null;
   if (name.length < 2 || name.length > 64) return "2-64 characters.";
-  if (!KEBAB_RE.test(name)) return "Lowercase letters, digits, and single hyphens only, e.g. \"acme-corp\".";
+  if (!KEBAB_RE.test(name)) return 'Lowercase letters, digits, and single hyphens only, e.g. "acme-corp".';
   return null;
 }
 
@@ -54,7 +54,11 @@ export default function ClientPicker({ clients, currentClient, onSelect, onCreat
             </p>
 
             <div className="mt-4 flex flex-wrap items-start gap-2.5">
+              <label htmlFor="client-select" className="sr-only">
+                Select an existing project
+              </label>
               <Select
+                id="client-select"
                 value={currentClient || ""}
                 onChange={(e) => e.target.value && onSelect(e.target.value)}
                 className="min-w-[220px]"
@@ -68,7 +72,11 @@ export default function ClientPicker({ clients, currentClient, onSelect, onCreat
               </Select>
               <span className="mt-2 text-xs font-medium uppercase tracking-wide text-ink-300">or</span>
               <div className="max-w-[220px]">
+                <label htmlFor="client-new-name" className="sr-only">
+                  New project name
+                </label>
                 <Input
+                  id="client-new-name"
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && createClient()}
