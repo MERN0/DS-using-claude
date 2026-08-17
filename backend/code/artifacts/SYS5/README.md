@@ -81,6 +81,7 @@ frontend/                        <- dashboard for config + running a generation
 ├── app.py                        <- FastAPI routes: config, CRUD, upload, generate/status/download
 ├── builders.py                   <- the only code that writes clients/<name>/ files
 ├── test_app.py                   <- end-to-end regression test (mocked sys5())
+├── web/                          <- the React UI (Vite + Tailwind), served by app.py once built
 ├── uploads/, outputs/            <- this UI's own scratch space (gitignored)
 └── README.md                     <- what it does, how to run it
 

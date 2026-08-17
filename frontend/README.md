@@ -1,9 +1,10 @@
 # SYS5 Test Case Generator — dashboard UI
 
-A small, self-contained FastAPI app for configuring a client's
-customizations to the SYS2→SYS5 pipeline, uploading a requirements
-workbook (plus supporting documents), and running a real generation —
-ending with a downloadable SYS5 test-case workbook.
+A React dashboard (`web/`) backed by a small, self-contained FastAPI app
+(`app.py`) for configuring a client's customizations to the SYS2→SYS5
+pipeline, uploading a requirements workbook (plus supporting documents),
+and running a real generation — ending with a downloadable SYS5 test-case
+workbook.
 
 This directory (`frontend/`) lives at the repo root, alongside `backend/`
 — the pipeline it configures and runs is under
@@ -74,15 +75,36 @@ version control).
 
 ## Running it
 
+One-time setup, then the usual dev loop:
+
 ```bash
 pip install -r requirements.txt
+cd web && npm install && cd ..
+```
+
+**Day-to-day development** (hot reload for the UI): run the backend and
+the Vite dev server side by side, in two terminals.
+
+```bash
+python app.py                 # terminal 1 -- backend on :5050
+cd web && npm run dev          # terminal 2 -- UI on :5173, proxies /api/* to :5050
+```
+
+Open `http://localhost:5173/`.
+
+**Single-command / production-style run**: build the React app once, then
+the FastAPI backend alone serves everything (UI + API) on one port.
+
+```bash
+cd web && npm run build && cd ..
 python app.py
 ```
 
-Then open `http://localhost:5050/`. Set `SYS5_UI_PORT`/`SYS5_UI_HOST` to
-change where it listens. For production-style serving, run it with
-`uvicorn app:app` directly instead (e.g. behind a reverse proxy) rather
-than the `python app.py` dev-server entry point.
+Open `http://localhost:5050/`. Set `SYS5_UI_PORT`/`SYS5_UI_HOST` to change
+where it listens; run `uvicorn app:app` directly instead of `python app.py`
+for actual production serving (e.g. behind a reverse proxy). Re-run
+`npm run build` after any change under `web/src/` to pick it up here —
+this mode serves whatever is currently in `web/dist/`, not live source.
 
 A real generation needs the pipeline's own LLM endpoint configured first —
 see the main README's [How to run it](../backend/code/artifacts/SYS5/README.md#how-to-run-it)
@@ -94,7 +116,9 @@ skills/subagents) works fine without one; only clicking Generate needs it.
 - `app.py` — the FastAPI routes: reference data (`/api/config`), CRUD for
   a client's memory/skills/subagents (thin wrappers around `builders.py`),
   file upload, and the generate/status/download job endpoints. Stateless
-  per request except the one global job dict.
+  per request except the one global job dict. Mounts `web/dist/` (the
+  built React app) at `/` once it exists, after every `/api/*` route so
+  those always take priority — see the comment above that mount.
 - `builders.py` — the only module that actually reads/writes files under
   `clients/<name>/`. Adds the SYS5 package to `sys.path` itself (it lives
   outside `backend/`, so this isn't automatic) and then reuses the
@@ -102,11 +126,12 @@ skills/subagents) works fine without one; only clicking Generate needs it.
   validate_safe_name`, the real tool list from `sys5_agent.tools.
   excel_tools` — rather than duplicating any of it. No FastAPI dependency,
   so it's testable on its own.
-- `templates/index.html` + `static/app.js` + `static/style.css` —
-  Bootstrap 5 + Bootstrap Icons (via CDN) for styling; vanilla JS handling
-  the four panels (memory / skills / subagents / generate), rendering the
-  read-only baseline reference views, and polling job status during a run.
+- `web/` — the React dashboard (Vite + Tailwind CSS + Framer Motion +
+  lucide-react), a separate project with its own `package.json`, talking
+  to `app.py` purely over `/api/*`. See `web/README.md` for its internal
+  structure.
 - `test_app.py` — end-to-end regression test against a scratch `clients/`
   directory and a mocked `sys5()` (no real LLM needed) covering the CRUD
   endpoints, the upload → generate → poll → download lifecycle, and the
-  single-job-at-a-time guard. Run with `python test_app.py`.
+  single-job-at-a-time guard. Run with `python test_app.py` -- no Node/npm
+  needed, it doesn't require `web/` to be built.

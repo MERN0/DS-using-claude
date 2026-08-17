@@ -59,8 +59,14 @@ def test_config_and_client_crud() -> None:
     app_mod, b = _fresh_env()
     client = TestClient(app_mod.app)
 
+    # "/" serves the built React SPA (see web/dist/) if it's been built, or a
+    # helpful 500 pointing at `npm run build` otherwise -- either is fine
+    # here, this suite doesn't require Node/npm to run.
     r = client.get("/")
-    assert r.status_code == 200 and "SYS5 Test Case Generator" in r.text
+    if (Path(__file__).resolve().parent / "web" / "dist").is_dir():
+        assert r.status_code == 200 and "SYS5 Test Case Generator" in r.text
+    else:
+        assert r.status_code == 500 and "npm run build" in r.text
 
     r = client.get("/api/config")
     data = r.json()

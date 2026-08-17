@@ -2,18 +2,25 @@
 FastAPI app: a dashboard for configuring a client's SYS5 pipeline
 customizations, uploading input files, and running a real generation.
 
-Unlike an earlier chat-based version of this UI, this is a stateless REST
-API plus a single-page dashboard -- every request carries whatever
-client/data it needs itself, no server-side conversation session. The one
-piece of server-side state is the single in-process generation job (see
-`_job` below): this app only ever runs one generation at a time, checked
-and enforced in `/api/generate` -- a deliberate simplification (see
-`README.md`), not an oversight.
+This is a stateless REST API -- every request carries whatever client/data
+it needs itself, no server-side conversation session -- served alongside
+the built React SPA (see `web/`, a separate Vite project; `npm run build`
+there produces `web/dist/`, which this app mounts as static files). The
+one piece of server-side state is the single in-process generation job
+(see `_job` below): this app only ever runs one generation at a time,
+checked and enforced in `/api/generate` -- a deliberate simplification
+(see `README.md`), not an oversight.
 
 Run with:
     pip install -r requirements.txt
+    cd web && npm install && npm run build && cd ..
     python app.py
 then open http://localhost:5050/
+
+For frontend development with hot reload, run `npm run dev` in `web/`
+instead (its dev server proxies /api/* to this backend -- see
+`web/vite.config.js`) and open the Vite dev server's own URL; this
+backend's own static mount is only used for the production build.
 """
 
 from __future__ import annotations
@@ -36,10 +43,9 @@ _SYS5_DIR = _REPO_ROOT / "backend" / "code" / "artifacts" / "SYS5"
 if str(_SYS5_DIR) not in sys.path:
     sys.path.insert(0, str(_SYS5_DIR))
 
-from fastapi import FastAPI, File, HTTPException, Request, UploadFile  # noqa: E402
-from fastapi.responses import FileResponse, HTMLResponse  # noqa: E402
+from fastapi import FastAPI, File, HTTPException, UploadFile  # noqa: E402
+from fastapi.responses import FileResponse  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
-from fastapi.templating import Jinja2Templates  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 
 import builders as b  # noqa: E402
@@ -48,8 +54,6 @@ from sys5_agent.agent import logsink  # noqa: E402
 from sys5_agent.config import settings  # noqa: E402
 
 app = FastAPI(title="SYS5 Test Case Generator")
-app.mount("/static", StaticFiles(directory=str(_FRONTEND_DIR / "static")), name="static")
-templates = Jinja2Templates(directory=str(_FRONTEND_DIR / "templates"))
 
 # Per-upload scratch space, owned entirely by this UI (never read by
 # anything else): each upload gets its own input/ dir so two browser tabs
@@ -61,11 +65,6 @@ _UPLOADS_DIR = _FRONTEND_DIR / "uploads"
 _OUTPUTS_DIR = _FRONTEND_DIR / "outputs"
 _UPLOADS_DIR.mkdir(exist_ok=True)
 _OUTPUTS_DIR.mkdir(exist_ok=True)
-
-
-@app.get("/", response_class=HTMLResponse)
-def index(request: Request):
-    return templates.TemplateResponse(request, "index.html")
 
 
 # ---------------------------------------------------------------------------
@@ -406,6 +405,26 @@ def api_generate_download():
         filename=output_path.name,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
+
+
+# ---------------------------------------------------------------------------
+# The built React SPA (see `web/`) -- mounted last, deliberately: Starlette
+# matches routes in registration order, so every /api/* path above always
+# wins over this catch-all, which only ever serves index.html/JS/CSS/assets.
+# ---------------------------------------------------------------------------
+
+_WEB_DIST = _FRONTEND_DIR / "web" / "dist"
+if _WEB_DIST.is_dir():
+    app.mount("/", StaticFiles(directory=str(_WEB_DIST), html=True), name="web")
+else:
+
+    @app.get("/")
+    def _frontend_not_built():
+        raise HTTPException(
+            500,
+            "The React frontend hasn't been built yet -- run `npm install && npm run build` "
+            "in frontend/web/, or `npm run dev` there for local development (see README.md).",
+        )
 
 
 if __name__ == "__main__":
