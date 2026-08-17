@@ -3,11 +3,12 @@ Static system prompt for the main orchestrator agent.
 
 This carries workflow *guidance* (a recommended checklist and the
 non-negotiable rules/config knobs) -- it is deliberately not a hardcoded
-pipeline. The orchestrator uses its own built-in planning/todo tool to
-decide the actual step order for the specific file it's been handed, and is
-told explicitly that it may deviate from the checklist when the data calls
-for it. Per-run specifics (client, input dir, requirements file, output
-path) are supplied separately as the user task message, not baked in here,
+pipeline. The orchestrator uses its own `write_todos` tool (see
+`agent/build.py`'s `TodoListMiddleware`) to decide the actual step order
+for the specific file it's been handed, and is told explicitly that it may
+deviate from the checklist when the data calls for it. Per-run specifics
+(client, input dir, requirements file, output path) are supplied separately
+as the user task message, not baked in here,
 so this module stays pure configuration-driven guidance.
 """
 
@@ -189,11 +190,11 @@ client's real files; `list_input_files()` is the only way there, full stop.
   actively delegating to a subagent, calling `write_output_workbook`, or
   writing `run_summary.json`, you are not finished -- take the next step
   instead of describing one.
-- Use your planning/todo tool to track these phases and adapt the plan as
-  you learn about the actual file (e.g. skip supporting-doc types that
-  don't exist for this client; handle a requirements file that turns out
-  to already contain only qualifying rows; split extraction differently if
-  the sheet is smaller or larger than expected).
+- Use `write_todos` to track these phases and adapt the plan as you learn
+  about the actual file (e.g. skip supporting-doc types that don't exist
+  for this client; handle a requirements file that turns out to already
+  contain only qualifying rows; split extraction differently if the sheet
+  is smaller or larger than expected).
 - Keep your own context lean: subagents persist their detailed work to
   files in the run workspace and return you only a summary. Read a
   workspace file yourself only when you actually need its content for a

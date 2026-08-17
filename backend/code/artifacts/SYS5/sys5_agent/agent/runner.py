@@ -14,7 +14,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from sys5_agent.agent import logsink
+from sys5_agent.agent import logsink, run_events
 from sys5_agent.agent.build import build_agent
 from sys5_agent.agent.progress import ProgressLogger
 from sys5_agent.config import settings
@@ -56,7 +56,8 @@ def run_pipeline(
 
     Returns a dict:
         {"run_dir": Path, "output_path": Path, "output_exists": bool,
-         "summary": dict | None, "final_message": str | None}
+         "summary": dict | None, "final_message": str | None,
+         "auto_continue_attempts": int}
 
     Raises only for a build-time configuration error (invalid client/domain,
     missing input_dir -- see `build_agent`), which is the caller's bug to
@@ -77,6 +78,10 @@ def run_pipeline(
     through `agent/logsink.py`, so a caller that registered a sink there
     before calling this (e.g. `frontend/app.py`, for a live-progress UI)
     receives them too, without affecting the CLI's plain stdout output.
+    `agent/progress.py` also emits structured events (current todo list,
+    which subagent is running, which skills were read) through
+    `agent/run_events.py`, and this function emits its own `run_dir` and
+    `auto_continue` events the same way -- see that module for the shape.
 
     `deepagents`' agent loop ends the moment the orchestrator's latest
     message has no tool call in it -- normally that only happens once
@@ -92,6 +97,11 @@ def run_pipeline(
     and reporting the run as genuinely incomplete.
     """
     agent, run_dir = build_agent(client, domain, input_dir, output_path)
+    # Emitted as soon as it's known, not only in the dict this function
+    # returns once the whole (potentially many-minutes-long) run is over --
+    # this is what lets a caller (e.g. frontend/app.py) know the workspace
+    # path while the run is still in progress.
+    run_events.emit({"type": "run_dir", "run_dir": str(run_dir)})
 
     # Record whether a file already sits at `output_path` (and, if so, when
     # it was last written) *before* the agent runs. A bare `is_file()` check
@@ -156,6 +166,7 @@ def run_pipeline(
             f"run_summary.json yet) -- auto-continuing "
             f"(attempt {attempt}/{settings.MAX_AUTO_CONTINUE_TURNS})"
         )
+        run_events.emit({"type": "auto_continue", "attempt": attempt})
         next_message = _CONTINUE_NUDGE
 
     summary: dict | None = None
@@ -176,4 +187,5 @@ def run_pipeline(
         "output_exists": output_written_this_run,
         "summary": summary,
         "final_message": final_message,
+        "auto_continue_attempts": attempt,
     }

@@ -20,8 +20,8 @@ once via `--domain`), unlike per-cluster/per-chunk work.
 A client can also register additional, purely-additive subagents alongside
 the fixed six the pipeline always runs -- see
 `agent/custom_subagents.load_custom_subagents` for the file format
-(`clients/<name>/subagents/*.md`) and `frontend/` (repo root) for the chat
-UI that authors them.
+(`clients/<name>/subagents/*.md`) and `frontend/` (repo root) for the
+dashboard that authors them.
 """
 
 from __future__ import annotations
@@ -32,6 +32,7 @@ from pathlib import Path
 
 from deepagents import create_deep_agent
 from deepagents.backends.filesystem import FilesystemBackend
+from langchain.agents.middleware.todo import TodoListMiddleware
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import InMemorySaver
 from sys5_agent.agent.custom_subagents import load_custom_subagents
@@ -185,6 +186,20 @@ def build_agent(client: str, domain: str, input_dir: Path, output_path: Path):
         memory=["memory/AGENTS.md"],
         skills=["skills/"],
         subagents=build_subagents(input_dir) + custom_subagents,
+        # `create_deep_agent`'s base middleware stack does NOT include a
+        # todo/planning tool by default for a plain ChatOpenAI model like
+        # this one (deepagents only auto-attaches TodoListMiddleware for
+        # specific OpenAI Codex harness profiles) -- verified empirically by
+        # inspecting the actual middleware list this call produces. Adding
+        # it explicitly here is what makes the orchestrator's own
+        # `write_todos` tool (and therefore live progress visibility, see
+        # `agent/progress.py`) real rather than aspirational. `middleware=`
+        # is additive (applied after the base stack, before the tail
+        # middleware -- see `deepagents.graph.create_deep_agent`'s own
+        # docstring) and only affects THIS agent, the orchestrator -- the
+        # six built-in subagents and any custom ones each build their own
+        # independent middleware stack and do not inherit this.
+        middleware=[TodoListMiddleware()],
         debug=settings.DEBUG,
         checkpointer=InMemorySaver(),
     )

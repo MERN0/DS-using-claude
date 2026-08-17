@@ -4,10 +4,13 @@ SubAgent definitions for the SYS2 -> SYS5 pipeline.
 Each subagent gets an isolated context window (deepagents `task()` tool) and
 returns only a summary to the orchestrator -- this is the mechanism that
 keeps a 1000-row requirements file from blowing the model's context budget.
-Every subagent already receives deepagents' default middleware stack
-(planning/todo tool, filesystem tools over the run workspace, auto
-summarization); the `tools` list below only adds/overrides the *custom*
-excel tools each role is allowed to use against the client's real files.
+Every subagent already receives its own filesystem tools over the run
+workspace and auto-summarization, but NOT a todo/planning tool of its own
+(that's only attached to the orchestrator, see `agent/build.py` -- each
+subagent call is a single bounded pass that persists its findings to a
+workspace file and returns a summary, not a multi-step plan it tracks
+itself); the `tools` list below only adds/overrides the *custom* excel
+tools each role is allowed to use against the client's real files.
 
 Heavy detail belongs in workspace files (via the built-in filesystem
 tools), not in what a subagent returns to the parent -- every system prompt
