@@ -8,6 +8,11 @@ the code afterward and understand it.
 If you already know `deepagents` cold, skip straight to
 [Repository layout](#repository-layout) and [Pipeline flow](#pipeline-flow).
 
+Once you know the architecture, [`CODE_WALKTHROUGH.md`](./CODE_WALKTHROUGH.md)
+is the function-by-function, block-by-block companion to this file — it
+walks the actual source, in execution order, explaining what each function
+does line by line rather than the "what/why" this document covers.
+
 ## Table of contents
 
 1. [What this system does](#what-this-system-does)
