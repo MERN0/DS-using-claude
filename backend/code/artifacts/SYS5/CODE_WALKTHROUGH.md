@@ -599,7 +599,7 @@ absolute path, nothing can ever resolve outside it, regardless of what the
 model tries.
 
 ```python
-agent = create_deep_agent(
+agent_kwargs = dict(
     model=llm,
     tools=[build_write_tool(output_path)],
     system_prompt=ORCHESTRATOR_SYSTEM_PROMPT,
@@ -607,10 +607,16 @@ agent = create_deep_agent(
     memory=["memory/AGENTS.md"],
     skills=["skills/"],
     subagents=build_subagents(input_dir) + custom_subagents,
-    middleware=[TodoListMiddleware()],
     debug=settings.DEBUG,
     checkpointer=InMemorySaver(),
 )
+
+try:
+    agent = create_deep_agent(middleware=[TodoListMiddleware()], **agent_kwargs)
+except AssertionError as e:
+    if "duplicate middleware" not in str(e).lower():
+        raise
+    agent = create_deep_agent(middleware=[], **agent_kwargs)
 
 return agent, run_dir
 ```
@@ -627,17 +633,34 @@ The actual `deepagents` call. Field by field:
   subagents (§5), with any client-specific ones appended (always additive,
   never a replacement — enforced by convention in the prompts, not by code
   here).
-- **`middleware=[TodoListMiddleware()]`** — this is the fix for a second
-  real gap, found by empirically inspecting the actual middleware stack
-  `create_deep_agent` produces for a plain `ChatOpenAI` model: it does
-  **not** include a todo/planning tool by default (that only happens
-  automatically for specific OpenAI Codex harness profiles). Without this
-  line, the orchestrator's prompt would reference a `write_todos` tool that
-  doesn't actually exist. `middleware=` is additive — applied after
+- **`middleware=[TodoListMiddleware()]`, wrapped in a try/except** — this
+  addresses a real gap, originally found by empirically inspecting the
+  actual middleware stack `create_deep_agent` produces for a plain
+  `ChatOpenAI` model: on the deepagents/langchain versions this was
+  verified against (see `requirements.txt`'s pin), it does **not** include
+  a todo/planning tool by default (that only happens automatically for
+  specific OpenAI Codex harness profiles). Without adding one, the
+  orchestrator's prompt would reference a `write_todos` tool that doesn't
+  actually exist. `middleware=` is additive — applied after
   `create_deep_agent`'s own base stack, before its tail middleware — and
   affects **only the orchestrator**; the six built-in subagents and any
   custom ones each build their own independent middleware stack from their
   own spec dict and do not inherit this.
+
+  The `try`/`except AssertionError` around it exists because that "no
+  default todo middleware for a plain model" behavior is a property of
+  *this library version*, not a guarantee — a different deepagents/
+  langchain release can attach its own default todo/planning middleware
+  for a plain model too, and `langchain.agents.factory`'s own agent-build
+  step asserts every middleware in the final stack has a unique `.name`,
+  raising `AssertionError: Please remove duplicate middleware instances.`
+  if two collide. Rather than hardcode an assumption about exactly which
+  versions do or don't already include one, this catches precisely that
+  failure message and retries with `middleware=[]` — the model already has
+  a working todo tool from the library's own default in that case, so
+  there's nothing to add. This is what actually fixed a real "Generate"
+  crash reported against a deployment running a different dependency
+  version than this repo's pinned/tested one.
 - `checkpointer=InMemorySaver()` — this is what makes the auto-continue
   loop in `run_pipeline` (§2) actually able to resume the same conversation
   by `thread_id`, rather than starting fresh each time. It's in-memory
@@ -1622,6 +1645,92 @@ increments its `errors` counter) — a non-`task` tool error instead falls
 through to a generic `"!!! tool error: ..."` line with no structured event
 at all (tool-level errors that aren't a subagent delegation aren't tracked
 in per-subagent usage stats today).
+
+---
+
+## 11. Extending the output: a second sheet or a second file
+
+A question worth answering explicitly, since it comes up the moment a real
+client needs something the fixed 13-column `SYS5_Test_Cases` sheet doesn't
+cover (a summary sheet, a per-cluster audit trail, a separate CSV
+alongside the workbook, ...): **can the existing write tool do this via
+config, or does it need new code?**
+
+**Answer: new code.** `write_output_workbook` (built by
+`build_write_tool(output_path)`, `tools/excel_tools.py:551-666` — see §7)
+is bound by closure to exactly one `Workbook`, one sheet
+(`ws = wb.active`, titled `settings.OUTPUT_SHEET_NAME`), and one output
+`Path`. There's no sheet-name or path *argument* on the tool for a model to
+vary, and `config/settings.py`'s `OUTPUT_COLUMNS`/`OUTPUT_SHEET_NAME` are
+single values, not a list of sheet specs — the single-sheet, single-file
+assumption is structural, not a config knob. Nothing here can be flipped
+on without writing a new tool.
+
+### Two ways to add it, depending on how it should behave
+
+**Option A — always written alongside the main output.** Extend
+`write_output_workbook` itself: inside the same closure (so it stays bound
+to the one `output_path` already validated at build time), call
+`wb.create_sheet(...)` for the second sheet, right after
+`ws = wb.active` / before the save sequence at
+`tools/excel_tools.py:646-659`. This is the smallest change — one function,
+one file — appropriate when every run should always produce this second
+sheet, no per-client opt-in needed.
+
+**Option B — a new, independently addressable tool.** Copy the exact
+closure-over-`Path` → `@tool` → temp-file/atomic-rename pattern from
+`build_write_tool` (`tools/excel_tools.py:551-666`) into a new factory,
+e.g.:
+
+```python
+def build_second_output_tool(output_path: Path):
+    out = Path(output_path).resolve()
+
+    @tool
+    def write_supplementary_workbook(rows: list[dict]) -> str:
+        """... docstring explaining what this writes and when to call it ..."""
+        # same shape as write_output_workbook: build a Workbook in memory,
+        # save to a same-directory temp file, verify it reopens with the
+        # expected row count, os.replace() into place, return {"error": ...}
+        # on any failure instead of raising -- see tools/excel_tools.py's
+        # write_output_workbook for the exact sequence to copy.
+        ...
+
+    return write_supplementary_workbook
+```
+
+Add matching config to `config/settings.py` (a second column list / sheet
+name, mirroring `OUTPUT_COLUMNS`/`OUTPUT_SHEET_NAME`) rather than
+hardcoding either inside the tool function — same "nothing outside
+`settings.py` hardcodes a column list" discipline the rest of this codebase
+follows.
+
+Then wire the new tool in one of two ways, depending on who should be able
+to use it:
+
+- **Always-on, orchestrator-only** (same as the main write tool): add it to
+  `tools=[build_write_tool(output_path), build_second_output_tool(...)]` in
+  `agent/build.py`'s `create_deep_agent(...)` call (§3, around line 189) —
+  every run gets it, only the orchestrator can call it, exactly like
+  `write_output_workbook` today.
+- **Optional, per-client opt-in** (same mechanism the curated MCP tools use,
+  §8/§6): register it in the `tools_by_name` lookup
+  `agent/custom_subagents.py:load_custom_subagents` builds
+  (`custom_subagents.py:147-149`, where the five Excel tools and any
+  `extra_tools` are merged), and list its name in
+  `frontend/builders.py:available_tools()` (this file lives outside the
+  `sys5_agent` package this walkthrough otherwise covers — see it directly)
+  so it shows up as a selectable checkbox in the
+  dashboard's "Tools it can use" UI. A client's custom subagent then opts
+  in the same way it opts into `search_sheet` or `fetch` today, via its
+  `tools: [...]` YAML frontmatter field (see §6).
+
+Neither option is built speculatively in this codebase today — there's no
+concrete second-sheet spec (column names, sheet name, what triggers writing
+it) to build against yet. This section exists so implementing one, once
+there's a real spec, is a matter of following an established pattern
+rather than re-deriving the closure/atomic-write safety properties from
+scratch.
 
 ---
 

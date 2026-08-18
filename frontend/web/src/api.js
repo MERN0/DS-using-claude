@@ -33,6 +33,7 @@ const enc = encodeURIComponent;
 
 export const api = {
   getConfig: (opts) => request("GET", "/api/config", undefined, opts),
+  setMcpEnabled: (enabled, opts) => request("PUT", "/api/mcp", { enabled }, opts),
 
   createClient: (name, opts) => request("POST", "/api/clients", { name }, opts),
 

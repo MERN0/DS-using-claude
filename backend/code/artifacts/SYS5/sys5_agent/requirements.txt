@@ -1,5 +1,17 @@
-deepagents>=0.1.0
-langchain-openai>=0.2.0
+# deepagents/langchain/langchain-openai are pinned to exact versions
+# verified working together (agent/build.py's create_deep_agent() call,
+# including the TodoListMiddleware addition) rather than left open-ended --
+# an open lower-bound-only pin here previously let a fresh install resolve
+# a newer deepagents/langchain release whose default middleware stack
+# collided with our own explicit middleware=[TodoListMiddleware()],
+# raising "AssertionError: Please remove duplicate middleware instances."
+# at agent-build time. agent/build.py now also has a defensive fallback for
+# this specific error, but the pin is what keeps it from firing at all on a
+# clean install. Bump deliberately, re-verifying build_agent() against the
+# new versions, not by widening this range.
+deepagents==0.7.0
+langchain==1.3.14
+langchain-openai==1.4.1
 langgraph>=0.2.0
 openpyxl>=3.1.0
 pyyaml>=6.0

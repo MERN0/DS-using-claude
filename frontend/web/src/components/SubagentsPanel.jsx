@@ -1,11 +1,27 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Users, Bot, UserPlus, Pencil, Trash2, Save, X } from "lucide-react";
-import { Card, CardBody, SectionTitle, Button, Input, Textarea, Spinner, ConfirmDialog } from "./ui.jsx";
+import {
+  Card,
+  CardBody,
+  SectionTitle,
+  Button,
+  Input,
+  Textarea,
+  Spinner,
+  ConfirmDialog,
+  Switch,
+} from "./ui.jsx";
 import { api } from "../api.js";
 import { useToast } from "./Toast.jsx";
 
 const EMPTY_FORM = { name: "", description: "", prompt_body: "", tools: [], skills: [] };
+
+// Mirrors tools/mcp_tools.py's available_mcp_tool_names() keys -- these two
+// tool names only actually work in a real run once MCP is switched on
+// below; every other tool name in `tools` (the 5 sandboxed Excel tools) is
+// always available regardless.
+const MCP_TOOL_NAMES = new Set(["fetch", "sequentialthinking"]);
 
 // Mirrors settings.validate_kebab_name(..., require_suffix="-agent")
 // server-side -- UX aid only, the backend re-validates and is the actual
@@ -24,13 +40,27 @@ function nameHint(name) {
   return null;
 }
 
-export default function SubagentsPanel({ client, builtIn, tools, skills }) {
+export default function SubagentsPanel({ client, builtIn, tools, skills, mcpEnabled, onMcpEnabledChange }) {
   const [custom, setCustom] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [editingExisting, setEditingExisting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [togglingMcp, setTogglingMcp] = useState(false);
   const toast = useToast();
+
+  async function toggleMcp(next) {
+    setTogglingMcp(true);
+    try {
+      const data = await api.setMcpEnabled(next);
+      onMcpEnabledChange(data.mcp_enabled);
+      toast(data.mcp_enabled ? "MCP tools turned on." : "MCP tools turned off.", "info");
+    } catch (e) {
+      toast(e.message, "error");
+    } finally {
+      setTogglingMcp(false);
+    }
+  }
 
   const nameError = editingExisting ? null : nameHint(form.name.trim());
 
@@ -219,6 +249,24 @@ export default function SubagentsPanel({ client, builtIn, tools, skills }) {
           />
 
           <div className="mb-3">
+            <div className="mb-2 flex items-center justify-between gap-3 rounded-lg border border-ink-100 bg-ink-50/60 px-3 py-2">
+              <div className="min-w-0">
+                <div className="text-xs font-semibold text-ink-700">
+                  MCP tools (fetch, sequential-thinking)
+                </div>
+                <p className="text-[11px] text-ink-500">
+                  {mcpEnabled
+                    ? "On -- a subagent selecting fetch/sequentialthinking below will actually get them in a real run."
+                    : "Off -- fetch/sequentialthinking can be selected below, but a real run won't have them until this is on."}
+                </p>
+              </div>
+              <Switch
+                checked={!!mcpEnabled}
+                onChange={toggleMcp}
+                disabled={togglingMcp}
+                label="MCP tools (fetch, sequential-thinking)"
+              />
+            </div>
             <div id="subagent-tools-label" className="mb-1.5 text-xs font-medium text-ink-500">
               Tools it can use
             </div>
@@ -229,6 +277,7 @@ export default function SubagentsPanel({ client, builtIn, tools, skills }) {
                   label={t}
                   title={tools[t]}
                   active={form.tools.includes(t)}
+                  needsMcp={MCP_TOOL_NAMES.has(t) && !mcpEnabled}
                   onClick={() => toggle("tools", t)}
                 />
               ))}
@@ -285,17 +334,22 @@ export default function SubagentsPanel({ client, builtIn, tools, skills }) {
   );
 }
 
-function Chip({ label, title, active, onClick }) {
+function Chip({ label, title, active, needsMcp, onClick }) {
   return (
     <button
       type="button"
-      title={title}
+      title={needsMcp ? `${title} (requires MCP tools to be on)` : title}
       aria-pressed={active}
       onClick={onClick}
-      className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors
+      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors
         ${active ? "border-brand-400 bg-brand-100 text-brand-700" : "border-ink-200 bg-white text-ink-600 hover:bg-ink-50"}`}
     >
       {label}
+      {needsMcp && (
+        <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
+          needs MCP on
+        </span>
+      )}
     </button>
   );
 }

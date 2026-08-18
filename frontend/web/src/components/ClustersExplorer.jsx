@@ -63,7 +63,7 @@ export default function ClustersExplorer() {
         )}
 
         {clusters.length > 0 && (
-          <div className="mt-3 flex flex-col gap-2">
+          <div className="thin-scroll mt-3 flex max-h-[480px] flex-col gap-2 overflow-y-auto pr-1">
             {clusters.map((cluster) =>
               cluster._parse_error ? (
                 <div
@@ -156,7 +156,7 @@ function ClusterRow({ cluster, resolved, testcases, expanded, onToggle }) {
                       <div className="mb-1 text-xs font-medium text-ink-500">
                         Requirements in this cluster
                       </div>
-                      <ul className="flex flex-col gap-1">
+                      <ul className="thin-scroll flex max-h-48 flex-col gap-1 overflow-y-auto pr-1">
                         {requirements.map((r, i) => (
                           <li
                             key={i}

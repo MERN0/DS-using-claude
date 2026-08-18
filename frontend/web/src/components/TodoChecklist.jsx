@@ -20,7 +20,7 @@ export default function TodoChecklist({ todos }) {
     <Card>
       <CardBody>
         <SectionTitle icon={<ListTodo className="h-4 w-4 text-brand-600" />}>Plan</SectionTitle>
-        <ul className="mt-2 flex flex-col gap-1.5">
+        <ul className="thin-scroll mt-2 flex max-h-64 flex-col gap-1.5 overflow-y-auto pr-1">
           <AnimatePresence initial={false}>
             {todos.map((todo, i) => (
               <motion.li

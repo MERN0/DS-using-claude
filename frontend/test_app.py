@@ -57,6 +57,10 @@ def _fresh_env():
     # clean slate, regardless of run order.
     app_mod._job = {"status": "idle", "log": [], "error": None, "result": None}
     app_mod._run_state = None
+    # settings.MCP_ENABLED is a plain module attribute, mutable at runtime
+    # by design (see app.py's api_set_mcp_enabled) -- reset it to the
+    # documented default so one test's toggle can't leak into the next.
+    b.settings.MCP_ENABLED = False
     return app_mod, b
 
 
@@ -88,6 +92,7 @@ def test_config_and_client_crud() -> None:
     assert len(data["built_in_subagents"]) == 6
     assert data["built_in_subagents"][0]["name"] == "discovery-agent"
     assert isinstance(data["llm_context_tokens"], int) and data["llm_context_tokens"] > 0
+    assert data["mcp_enabled"] is False  # _fresh_env's documented default
 
     r = client.get("/api/skills/writing-style/baseline")
     baseline = r.json()
@@ -405,12 +410,35 @@ def test_generate_rejects_bad_input() -> None:
     print("test_generate_rejects_bad_input: OK")
 
 
+def test_mcp_toggle() -> None:
+    from starlette.testclient import TestClient
+
+    app_mod, b = _fresh_env()
+    client = TestClient(app_mod.app)
+
+    assert client.get("/api/config").json()["mcp_enabled"] is False
+
+    r = client.put("/api/mcp", json={"enabled": True})
+    assert r.status_code == 200 and r.json()["mcp_enabled"] is True
+    # Takes effect immediately, no restart -- the very next /api/config read
+    # (and the next real generation's fetch_mcp_tools() call) sees it.
+    assert client.get("/api/config").json()["mcp_enabled"] is True
+    assert b.settings.MCP_ENABLED is True
+
+    r = client.put("/api/mcp", json={"enabled": False})
+    assert r.status_code == 200 and r.json()["mcp_enabled"] is False
+    assert client.get("/api/config").json()["mcp_enabled"] is False
+
+    print("test_mcp_toggle: OK")
+
+
 if __name__ == "__main__":
     test_config_and_client_crud()
     test_memory_skill_subagent_crud()
     test_upload_and_generate_lifecycle()
     test_generate_rejects_bad_input()
     test_workspace_endpoints_404_before_any_run()
+    test_mcp_toggle()
     shutil.rmtree(_SCRATCH_CLIENTS, ignore_errors=True)
     shutil.rmtree(_SCRATCH_UI, ignore_errors=True)
     print("ALL OK")

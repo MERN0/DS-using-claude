@@ -80,6 +80,32 @@ export const Button = forwardRef(function Button(
   );
 });
 
+// Accessible on/off toggle (role="switch") -- used where a setting takes
+// effect immediately rather than needing a separate Save action.
+export function Switch({ checked, onChange, disabled, label }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors
+        focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-300 focus-visible:ring-offset-1
+        disabled:opacity-40 disabled:cursor-not-allowed
+        ${checked ? "bg-brand-600" : "bg-ink-200"}`}
+    >
+      <motion.span
+        layout
+        transition={{ type: "spring", stiffness: 500, damping: 32 }}
+        className={`inline-block h-4.5 w-4.5 transform rounded-full bg-white shadow-sm
+          ${checked ? "translate-x-[22px]" : "translate-x-1"}`}
+      />
+    </button>
+  );
+}
+
 export function Spinner({ className = "h-4 w-4" }) {
   return (
     <svg className={`animate-spin ${className}`} viewBox="0 0 24 24" fill="none">

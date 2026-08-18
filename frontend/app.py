@@ -89,7 +89,29 @@ def api_config():
         # see sys5_agent.agent.build) actually matches the real model
         # endpoint's window rather than guessing.
         "llm_context_tokens": settings.LLM_CONTEXT_TOKENS,
+        # settings.MCP_ENABLED starts from the SYS5_MCP_ENABLED env var but
+        # is a plain module attribute from here on -- api_set_mcp_enabled
+        # below flips it directly, live, no restart required (every run
+        # re-reads it fresh via tools/mcp_tools.py's fetch_mcp_tools()).
+        "mcp_enabled": settings.MCP_ENABLED,
     }
+
+
+class McpEnabledBody(BaseModel):
+    enabled: bool
+
+
+@app.put("/api/mcp")
+def api_set_mcp_enabled(body: McpEnabledBody):
+    """Flips the curated MCP tool servers (see tools/mcp_tools.py) on/off
+    for every generation from this point on. This is the one setting in
+    config/settings.py that's genuinely safe to mutate at runtime from a
+    request handler: fetch_mcp_tools() re-checks settings.MCP_ENABLED fresh
+    on every build_agent() call rather than caching it at import time, so
+    there's nothing to restart or invalidate -- the very next generation
+    picks up the new value."""
+    settings.MCP_ENABLED = body.enabled
+    return {"mcp_enabled": settings.MCP_ENABLED}
 
 
 # ---------------------------------------------------------------------------

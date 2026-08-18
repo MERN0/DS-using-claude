@@ -1,7 +1,6 @@
 import { useState } from "react";
-import { FolderOpen, Plus, ArrowRight } from "lucide-react";
-import { motion } from "framer-motion";
-import { Card, CardBody, Button, Input, Select } from "./ui.jsx";
+import { FolderOpen, Plus, Check } from "lucide-react";
+import { Button, Input, Select } from "./ui.jsx";
 import { api } from "../api.js";
 import { useToast } from "./Toast.jsx";
 
@@ -17,6 +16,10 @@ function nameHint(name) {
   return null;
 }
 
+// Compact, vertical project switcher -- lives in the Sidebar app-shell
+// rather than as its own full-width page section, so picking/creating a
+// project reads as app chrome (like a workspace switcher), not a primary
+// piece of page content competing with the actual work below it.
 export default function ClientPicker({ clients, currentClient, onSelect, onCreated }) {
   const [newName, setNewName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -40,78 +43,69 @@ export default function ClientPicker({ clients, currentClient, onSelect, onCreat
   }
 
   return (
-    <Card className="mb-6">
-      <CardBody>
-        <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-100 text-brand-600">
-            <FolderOpen className="h-5 w-5" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <h2 className="text-[15px] font-semibold text-ink-900">Project</h2>
-            <p className="mt-0.5 text-sm text-ink-500 max-w-2xl">
-              A project (client) is a folder of extra rules, skill overrides, and custom subagents layered on
-              top of the standard behavior. Nothing customized yet? It still runs fine on the defaults.
-            </p>
+    <div className="border-b border-ink-100 px-4 py-4">
+      <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-400">
+        <FolderOpen className="h-3.5 w-3.5" /> Project
+      </div>
 
-            <div className="mt-4 flex flex-wrap items-start gap-2.5">
-              <label htmlFor="client-select" className="sr-only">
-                Select an existing project
-              </label>
-              <Select
-                id="client-select"
-                value={currentClient || ""}
-                onChange={(e) => e.target.value && onSelect(e.target.value)}
-                className="min-w-[220px]"
-              >
-                <option value="">Select a project&hellip;</option>
-                {clients.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </Select>
-              <span className="mt-2 text-xs font-medium uppercase tracking-wide text-ink-300">or</span>
-              <div className="max-w-[220px]">
-                <label htmlFor="client-new-name" className="sr-only">
-                  New project name
-                </label>
-                <Input
-                  id="client-new-name"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && createClient()}
-                  placeholder="new-project-name"
-                  className={hint ? "border-rose-300 focus:border-rose-400 focus:ring-rose-100" : ""}
-                />
-                {hint ? (
-                  <p className="mt-1 text-xs text-rose-600">{hint}</p>
-                ) : (
-                  <p className="mt-1 text-xs text-ink-300">lowercase-with-hyphens</p>
-                )}
-              </div>
-              <Button
-                tone="primary"
-                icon={<Plus className="h-4 w-4" />}
-                disabled={busy || !newName.trim() || !!hint}
-                onClick={createClient}
-              >
-                Use this project
-              </Button>
-            </div>
-
-            {currentClient && (
-              <motion.div
-                initial={{ opacity: 0, y: -4 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-brand-600"
-              >
-                Working on <span className="rounded-md bg-brand-50 px-1.5 py-0.5">{currentClient}</span>
-                <ArrowRight className="h-3.5 w-3.5" />
-              </motion.div>
-            )}
-          </div>
+      {currentClient && (
+        <div className="mb-2.5 flex items-center gap-1.5 rounded-lg bg-brand-50 px-2.5 py-1.5 text-sm font-medium text-brand-700">
+          <Check className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">{currentClient}</span>
         </div>
-      </CardBody>
-    </Card>
+      )}
+
+      <label htmlFor="client-select" className="sr-only">
+        Select an existing project
+      </label>
+      <Select
+        id="client-select"
+        value={currentClient || ""}
+        onChange={(e) => e.target.value && onSelect(e.target.value)}
+        className="w-full"
+      >
+        <option value="">{clients.length ? "Switch project…" : "No projects yet"}</option>
+        {clients.map((c) => (
+          <option key={c} value={c}>
+            {c}
+          </option>
+        ))}
+      </Select>
+
+      <div className="mt-2.5 flex items-center gap-2">
+        <div className="h-px flex-1 bg-ink-100" />
+        <span className="text-[10px] font-medium uppercase tracking-wide text-ink-300">new project</span>
+        <div className="h-px flex-1 bg-ink-100" />
+      </div>
+
+      <div className="mt-2.5">
+        <label htmlFor="client-new-name" className="sr-only">
+          New project name
+        </label>
+        <Input
+          id="client-new-name"
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && createClient()}
+          placeholder="new-project-name"
+          className={`text-sm ${hint ? "border-rose-300 focus:border-rose-400 focus:ring-rose-100" : ""}`}
+        />
+        {hint ? (
+          <p className="mt-1 text-[11px] text-rose-600">{hint}</p>
+        ) : (
+          <p className="mt-1 text-[11px] text-ink-300">lowercase-with-hyphens</p>
+        )}
+        <Button
+          tone="primary"
+          size="sm"
+          className="mt-2 w-full"
+          icon={<Plus className="h-3.5 w-3.5" />}
+          disabled={busy || !newName.trim() || !!hint}
+          onClick={createClient}
+        >
+          Create &amp; use
+        </Button>
+      </div>
+    </div>
   );
 }

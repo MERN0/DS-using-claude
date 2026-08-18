@@ -184,7 +184,7 @@ def build_agent(client: str, domain: str, input_dir: Path, output_path: Path):
     # filesystem-separation guarantee this design relies on.
     backend = FilesystemBackend(root_dir=str(run_dir), virtual_mode=True)
 
-    agent = create_deep_agent(
+    agent_kwargs = dict(
         model=llm,
         tools=[build_write_tool(output_path)],
         system_prompt=ORCHESTRATOR_SYSTEM_PROMPT,
@@ -192,22 +192,43 @@ def build_agent(client: str, domain: str, input_dir: Path, output_path: Path):
         memory=["memory/AGENTS.md"],
         skills=["skills/"],
         subagents=build_subagents(input_dir) + custom_subagents,
-        # `create_deep_agent`'s base middleware stack does NOT include a
-        # todo/planning tool by default for a plain ChatOpenAI model like
-        # this one (deepagents only auto-attaches TodoListMiddleware for
-        # specific OpenAI Codex harness profiles) -- verified empirically by
-        # inspecting the actual middleware list this call produces. Adding
-        # it explicitly here is what makes the orchestrator's own
-        # `write_todos` tool (and therefore live progress visibility, see
-        # `agent/progress.py`) real rather than aspirational. `middleware=`
-        # is additive (applied after the base stack, before the tail
-        # middleware -- see `deepagents.graph.create_deep_agent`'s own
-        # docstring) and only affects THIS agent, the orchestrator -- the
-        # six built-in subagents and any custom ones each build their own
-        # independent middleware stack and do not inherit this.
-        middleware=[TodoListMiddleware()],
         debug=settings.DEBUG,
         checkpointer=InMemorySaver(),
     )
+
+    # `create_deep_agent`'s base middleware stack does NOT include a
+    # todo/planning tool by default for a plain ChatOpenAI model like this
+    # one on the deepagents/langchain versions this was verified against
+    # (deepagents only auto-attaches TodoListMiddleware for specific OpenAI
+    # Codex harness profiles) -- confirmed empirically by inspecting the
+    # actual middleware list this call produces. Adding it explicitly here
+    # is what makes the orchestrator's own `write_todos` tool (and therefore
+    # live progress visibility, see `agent/progress.py`) real rather than
+    # aspirational. `middleware=` is additive (applied after the base
+    # stack, before the tail middleware -- see
+    # `deepagents.graph.create_deep_agent`'s own docstring) and only
+    # affects THIS agent, the orchestrator -- the six built-in subagents and
+    # any custom ones each build their own independent middleware stack and
+    # do not inherit this.
+    #
+    # This assumption is version-dependent, not a law of the library: a
+    # different deepagents/langchain release (see requirements.txt's pin
+    # and comment) can attach its own default todo/planning middleware for
+    # a plain model too, in which case adding a second one here collides --
+    # langchain.agents.factory's own agent-building code asserts every
+    # middleware in the final stack has a unique `.name` and raises
+    # `AssertionError: Please remove duplicate middleware instances.` if
+    # not. Rather than hardcode an assumption about exactly which versions
+    # do or don't already include one (liable to go stale the moment either
+    # dependency's default stack changes again), catch precisely that
+    # failure and retry without our own -- the model already has a working
+    # todo tool from the library's own default in that case, so there is
+    # nothing to add.
+    try:
+        agent = create_deep_agent(middleware=[TodoListMiddleware()], **agent_kwargs)
+    except AssertionError as e:
+        if "duplicate middleware" not in str(e).lower():
+            raise
+        agent = create_deep_agent(middleware=[], **agent_kwargs)
 
     return agent, run_dir
